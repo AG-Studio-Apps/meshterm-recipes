@@ -1,0 +1,797 @@
+{
+ "kind": "host-recipes",
+ "schema": 1,
+ "serial": 1,
+ "date": "2026-10-12",
+ "packages": {
+  "curl": {
+   "apt": "curl",
+   "dnf": "curl",
+   "yum": "curl",
+   "apk": "curl"
+  },
+  "caCertificates": {
+   "apt": "ca-certificates",
+   "apk": "ca-certificates"
+  },
+  "bash": {
+   "apk": "bash"
+  },
+  "python3": {
+   "apt": "python3",
+   "dnf": "python3",
+   "yum": "python3",
+   "apk": "python3"
+  },
+  "awk": {
+   "apt": "gawk",
+   "dnf": "gawk",
+   "yum": "gawk",
+   "apk": "gawk"
+  },
+  "sha256sum": {
+   "apt": "coreutils",
+   "dnf": "coreutils",
+   "yum": "coreutils",
+   "apk": "coreutils"
+  },
+  "sftpServer": {
+   "apt": "openssh-sftp-server",
+   "dnf": "openssh-server",
+   "yum": "openssh-server",
+   "apk": "openssh-sftp-server"
+  },
+  "bubblewrap": {
+   "apt": "bubblewrap",
+   "dnf": "bubblewrap",
+   "yum": "bubblewrap",
+   "apk": "bubblewrap"
+  },
+  "procps": {
+   "apt": "procps",
+   "dnf": "procps-ng",
+   "yum": "procps-ng",
+   "apk": "procps-ng"
+  },
+  "sudo": {
+   "apt": "sudo",
+   "dnf": "sudo",
+   "apk": "sudo",
+   "unknown": "sudo"
+  },
+  "uidmap": {
+   "apt": "uidmap",
+   "dnf": "uidmap",
+   "yum": "uidmap",
+   "apk": "shadow-uidmap"
+  },
+  "slirp4netns": {
+   "apt": "slirp4netns",
+   "dnf": "slirp4netns",
+   "yum": "slirp4netns",
+   "apk": "slirp4netns"
+  }
+ },
+ "intents": {
+  "tmux.install": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y tmux"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "{{sudo}}dnf install -y tmux"
+   },
+   {
+    "families": [
+     "yum"
+    ],
+    "run": "{{sudo}}yum install -y tmux"
+   },
+   {
+    "families": [
+     "pacman"
+    ],
+    "run": "{{sudo}}pacman -S --noconfirm tmux"
+   },
+   {
+    "families": [
+     "apk"
+    ],
+    "run": "{{sudo}}apk add tmux"
+   },
+   {
+    "families": [
+     "zypper"
+    ],
+    "run": "{{sudo}}zypper install -y tmux"
+   },
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "brew install tmux"
+   }
+  ],
+  "packages.install": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}}"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "{{sudo}}dnf install -y {{packages}}"
+   },
+   {
+    "families": [
+     "yum"
+    ],
+    "run": "{{sudo}}yum install -y {{packages}}"
+   },
+   {
+    "families": [
+     "apk"
+    ],
+    "run": "{{sudo}}apk add {{packages}}"
+   }
+  ],
+  "developer-tools.install": [
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "xcode-select --install"
+   }
+  ],
+  "engine.docker.install-package": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y docker.io"
+   }
+  ],
+  "engine.docker.install-script": [
+   {
+    "families": [
+     "apt",
+     "unknown"
+    ],
+    "run": "curl -fsSL https://get.docker.com | sh",
+    "admin": true
+   }
+  ],
+  "engine.docker.install-alpine": [
+   {
+    "families": [
+     "apk"
+    ],
+    "run": "{{sudo}}apk add docker docker-cli-compose && {{sudo}}rc-update add docker default && {{sudo}}rc-service docker start && {{sudo}}addgroup {{user}} docker"
+   }
+  ],
+  "engine.docker.join-group": [
+   {
+    "families": [
+     "apt",
+     "unknown"
+    ],
+    "run": "{{sudo}}usermod -aG docker {{user}}"
+   }
+  ],
+  "engine.podman.install": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y podman"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "{{sudo}}dnf install -y podman"
+   }
+  ],
+  "engine.docker-desktop.install": [
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "brew install --cask docker-desktop"
+   }
+  ],
+  "engine.orbstack.install": [
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "brew install --cask orbstack"
+   }
+  ],
+  "engine.docker.start-systemd": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}systemctl enable --now docker"
+   }
+  ],
+  "engine.docker.start-openrc": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}rc-service docker start && {{sudo}}rc-update add docker default"
+   }
+  ],
+  "engine.podman.start-systemd": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}systemctl enable --now podman.socket"
+   }
+  ],
+  "engine.podman.start-systemd-user": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "systemctl --user enable --now podman.socket"
+   }
+  ],
+  "engine.podman.start-openrc": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}rc-service podman start && {{sudo}}rc-update add podman default"
+   }
+  ],
+  "engine.containerd.start-systemd": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}systemctl enable --now containerd"
+   }
+  ],
+  "engine.containerd.start-openrc": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}rc-service containerd start && {{sudo}}rc-update add containerd default"
+   }
+  ],
+  "engine.apple.start": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "container system start"
+   }
+  ],
+  "engine.docker-desktop.open": [
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "open -a Docker"
+   }
+  ],
+  "engine.orbstack.open": [
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "open -a OrbStack"
+   }
+  ],
+  "engine.colima.start": [
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "colima start"
+   }
+  ],
+  "engine.podman-machine.start": [
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "podman machine start"
+   }
+  ],
+  "compose.install-package": [
+   {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "ubuntu",
+     "linuxmint",
+     "pop"
+    ],
+    "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y docker-compose-v2"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "{{sudo}}dnf install -y docker-compose"
+   },
+   {
+    "families": [
+     "apk"
+    ],
+    "run": "{{sudo}}apk add docker-cli-compose"
+   },
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "brew install docker-compose"
+   }
+  ],
+  "compose.install-docker-repo": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "curl -fsSL https://get.docker.com | sh",
+    "admin": true
+   }
+  ],
+  "compose.install-binary-docker": [
+   {
+    "families": [
+     "apt",
+     "dnf",
+     "unknown"
+    ],
+    "run": "{{sudo}}mkdir -p /usr/local/lib/docker/cli-plugins && {{sudo}}curl -fsSL \"https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)\" -o /usr/local/lib/docker/cli-plugins/docker-compose && {{sudo}}chmod +x /usr/local/lib/docker/cli-plugins/docker-compose"
+   }
+  ],
+  "compose.install-binary-podman": [
+   {
+    "families": [
+     "apt",
+     "dnf",
+     "unknown"
+    ],
+    "run": "{{sudo}}curl -fsSL \"https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)\" -o /usr/local/bin/docker-compose && {{sudo}}chmod +x /usr/local/bin/docker-compose"
+   }
+  ],
+  "podman.socket-user": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{ systemctl --user is-active --quiet podman.socket || systemctl --user enable --now podman.socket; }"
+   }
+  ],
+  "podman.socket-system": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{ systemctl is-active --quiet podman.socket || {{sudo}}systemctl enable --now podman.socket; }",
+    "admin": true
+   }
+  ],
+  "git.install": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y git"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "{{sudo}}dnf install -y git"
+   },
+   {
+    "families": [
+     "apk"
+    ],
+    "run": "{{sudo}}apk add git"
+   },
+   {
+    "families": [
+     "macos"
+    ],
+    "run": "xcode-select --install"
+   },
+   {
+    "families": [
+     "unknown"
+    ],
+    "run": "if command -v apt-get >/dev/null; then {{sudo}}apt-get update && {{sudo}}apt-get install -y git; elif command -v dnf >/dev/null; then {{sudo}}dnf install -y git; elif command -v yum >/dev/null; then {{sudo}}yum install -y git; elif command -v apk >/dev/null; then {{sudo}}apk add git; fi"
+   }
+  ],
+  "ca-certificates.install": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y ca-certificates"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "{{sudo}}dnf install -y ca-certificates"
+   },
+   {
+    "families": [
+     "apk"
+    ],
+    "run": "{{sudo}}apk add ca-certificates"
+   },
+   {
+    "families": [
+     "unknown"
+    ],
+    "run": "if command -v apt-get >/dev/null; then {{sudo}}apt-get update && {{sudo}}apt-get install -y ca-certificates; elif command -v dnf >/dev/null; then {{sudo}}dnf install -y ca-certificates; elif command -v yum >/dev/null; then {{sudo}}yum install -y ca-certificates; elif command -v apk >/dev/null; then {{sudo}}apk add ca-certificates; fi"
+   }
+  ],
+  "podman.rootless-prerequisites": [
+   {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "ubuntu",
+     "debian",
+     "raspbian",
+     "linuxmint",
+     "pop"
+    ],
+    "run": "{{sudo}}apt install -y {{packages}} passt"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "ids": [
+     "fedora",
+     "rhel",
+     "centos",
+     "rocky",
+     "almalinux"
+    ],
+    "run": "{{sudo}}dnf install -y {{packages}}"
+   }
+  ],
+  "engine.docker.rootless-setup": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "dockerd-rootless-setuptool.sh install"
+   }
+  ],
+  "engine.docker.rootless-enable": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "systemctl --user enable --now docker"
+   }
+  ],
+  "engine.docker.rootless-start": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "systemctl --user start docker"
+   }
+  ],
+  "engine.rootless.linger": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}loginctl enable-linger {{user}}"
+   }
+  ],
+  "engine.rootless.apparmor-userns": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "f=$(echo {{path}} | sed -e 's@^/@@' -e 's@/@.@g') && { echo 'abi <abi/4.0>,'; echo 'include <tunables/global>'; echo '\"{{path}}\" flags=(unconfined) {'; echo '  userns,'; echo '}'; } | {{sudo}}tee \"/etc/apparmor.d/$f\" >/dev/null && {{sudo}}systemctl restart apparmor.service"
+   }
+  ],
+  "engine.docker.start-service-systemd": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}systemctl start docker"
+   }
+  ],
+  "engine.docker.start-socket-systemd": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}systemctl start docker.socket"
+   }
+  ],
+  "engine.containerd.rootless-setup": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "containerd-rootless-setuptool.sh install"
+   }
+  ],
+  "engine.containerd.start-service-systemd": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}systemctl start containerd"
+   }
+  ],
+  "sudo.install": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "apt-get update && apt-get install -y {{packages}} && usermod -aG {{group}} {{user}}",
+    "admin": true
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "dnf install -y {{packages}} && usermod -aG {{group}} {{user}}",
+    "admin": true
+   },
+   {
+    "families": [
+     "apk"
+    ],
+    "run": "apk add {{packages}} && addgroup {{user}} {{group}} && echo \"%wheel ALL=(ALL:ALL) ALL\" > /etc/sudoers.d/wheel",
+    "admin": true
+   },
+   {
+    "families": [
+     "unknown"
+    ],
+    "run": "apt-get update && apt-get install -y {{packages}} && usermod -aG {{group}} {{user}}",
+    "admin": true
+   }
+  ],
+  "sudo.grant": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "{{sudo}}usermod -aG {{group}} {{user}}"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "{{sudo}}usermod -aG {{group}} {{user}}"
+   },
+   {
+    "families": [
+     "unknown"
+    ],
+    "run": "{{sudo}}usermod -aG {{group}} {{user}}"
+   }
+  ],
+  "ssh-server.install": [
+   {
+    "families": [
+     "apt"
+    ],
+    "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y openssh-server"
+   },
+   {
+    "families": [
+     "dnf"
+    ],
+    "run": "{{sudo}}dnf install -y openssh-server && {{sudo}}systemctl enable --now sshd"
+   },
+   {
+    "families": [
+     "apk"
+    ],
+    "run": "{{sudo}}apk add openssh && {{sudo}}rc-update add sshd && {{sudo}}rc-service sshd start"
+   }
+  ],
+  "sshd.reload": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}systemctl reload ssh || {{sudo}}systemctl reload sshd"
+   }
+  ],
+  "sshd.host-keys": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}ssh-keygen -A"
+   }
+  ],
+  "tailscale.up-ssh": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}tailscale up --ssh"
+   }
+  ],
+  "tailscale.set-ssh": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}tailscale set --ssh"
+   }
+  ],
+  "firewall.ufw.allow": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}ufw allow {{port}}/{{proto}}"
+   }
+  ],
+  "firewall.ufw.allow-from-tailnet": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}ufw allow from 100.64.0.0/10 to any port {{port}} proto {{proto}}"
+   }
+  ],
+  "firewall.ufw.allow-on-tailscale0": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}ufw allow in on tailscale0 to any port {{port}} proto {{proto}}"
+   }
+  ],
+  "firewall.firewalld.allow-ssh": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}firewall-cmd --permanent --add-service=ssh && {{sudo}}firewall-cmd --reload"
+   }
+  ],
+  "firewall.firewalld.allow": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}firewall-cmd --permanent --add-port={{port}}/{{proto}} && {{sudo}}firewall-cmd --reload"
+   }
+  ],
+  "firewall.firewalld.allow-from-tailnet": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=100.64.0.0/10 port port={{port}} protocol={{proto}} accept' && {{sudo}}firewall-cmd --reload"
+   }
+  ],
+  "firewall.nft.allow": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}nft add rule inet filter input {{proto}} dport {{port}} accept"
+   }
+  ],
+  "firewall.nft.allow-from-tailnet": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}nft add rule inet filter input ip saddr 100.64.0.0/10 {{proto}} dport {{port}} accept"
+   }
+  ],
+  "firewall.iptables.allow": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}iptables -A INPUT -p {{proto}} --dport {{port}} -j ACCEPT"
+   }
+  ],
+  "firewall.iptables.allow-from-tailnet": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}iptables -A INPUT -p {{proto}} --dport {{port}} -s 100.64.0.0/10 -j ACCEPT"
+   }
+  ],
+  "agent.claude.install-official": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "curl -fsSL https://claude.ai/install.sh -o ~/.mt-install-claude.sh && bash ~/.mt-install-claude.sh && rm -f ~/.mt-install-claude.sh"
+   }
+  ],
+  "agent.claude.install-homebrew": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "brew install --cask claude-code"
+   }
+  ],
+  "agent.claude.install-npm": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "npm install -g --prefix \"$HOME/.local\" @anthropic-ai/claude-code"
+   }
+  ],
+  "agent.codex.install-official": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "curl -fsSL https://chatgpt.com/codex/install.sh -o ~/.mt-install-codex.sh && env CODEX_NON_INTERACTIVE=1 sh ~/.mt-install-codex.sh && rm -f ~/.mt-install-codex.sh"
+   }
+  ],
+  "agent.codex.install-homebrew": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "brew install --cask codex"
+   }
+  ],
+  "agent.codex.install-npm": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "npm install -g --prefix \"$HOME/.local\" @openai/codex"
+   }
+  ],
+  "agent.agy.install-official": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "curl -fsSL https://antigravity.google/cli/install.sh -o ~/.mt-install-agy.sh && bash ~/.mt-install-agy.sh && rm -f ~/.mt-install-agy.sh"
+   }
+  ],
+  "herdr.install": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "curl -fsSL https://herdr.dev/install.sh -o ~/.mt-install-herdr.sh && sh ~/.mt-install-herdr.sh && rm -f ~/.mt-install-herdr.sh"
+   }
+  ]
+ }
+}

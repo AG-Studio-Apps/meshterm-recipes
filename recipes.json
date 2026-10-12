@@ -1,7 +1,7 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 2,
+  "serial": 3,
   "date": "2026-10-12",
   "packages": {
     "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
@@ -12,7 +12,10 @@
     "sha256sum": {"apt": "coreutils", "dnf": "coreutils", "yum": "coreutils", "apk": "coreutils"},
     "sftpServer": {"apt": "openssh-sftp-server", "dnf": "openssh-server", "yum": "openssh-server", "apk": "openssh-sftp-server"},
     "bubblewrap": {"apt": "bubblewrap", "dnf": "bubblewrap", "yum": "bubblewrap", "apk": "bubblewrap"},
-    "procps": {"apt": "procps", "dnf": "procps-ng", "yum": "procps-ng", "apk": "procps-ng"}
+    "procps": {"apt": "procps", "dnf": "procps-ng", "yum": "procps-ng", "apk": "procps-ng"},
+    "sudo": {"apt": "sudo", "dnf": "sudo", "yum": "sudo", "apk": "sudo", "pacman": "sudo", "zypper": "sudo", "unknown": "sudo"},
+    "uidmap": {"apt": "uidmap", "dnf": "shadow-utils", "yum": "shadow-utils", "apk": "shadow-uidmap"},
+    "slirp4netns": {"apt": "slirp4netns", "dnf": "slirp4netns", "yum": "slirp4netns", "apk": "slirp4netns"}
   },
   "intents": {
     "tmux.install": [
@@ -155,7 +158,9 @@
                          "amazonlinux:2023": "get.docker.com does not support Amazon Linux (the app offers this where the stacks probe says Docker's repository: Debian, Raspberry Pi OS)"}}}
 ,
       {"families": ["any"], "ids": ["rhel", "centos", "rocky", "almalinux", "ol"], "run": "{{sudo}}dnf install -y dnf-plugins-core && {{sudo}}dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo && {{sudo}}dnf install -y docker-compose-plugin",
-       "ci": {"check": "/usr/libexec/docker/cli-plugins/docker-compose version"}}
+       "ci": {"check": "/usr/libexec/docker/cli-plugins/docker-compose version"}},
+      {"families": ["apt"], "ids": ["debian", "raspbian"], "versions": {"min": "13"}, "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y docker-compose",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq docker.io >/dev/null && rm -rf /var/lib/apt/lists/*", "check": "docker compose version"}}
     ],
     "compose.install-binary-docker": [
       {"families": ["apt", "dnf", "unknown"], "run": "{{sudo}}mkdir -p /usr/local/lib/docker/cli-plugins && {{sudo}}curl -fsSL \"https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)\" -o /usr/local/lib/docker/cli-plugins/docker-compose && {{sudo}}chmod +x /usr/local/lib/docker/cli-plugins/docker-compose",
@@ -196,23 +201,205 @@
        "ci": {"check": "test -f /etc/ssl/certs/ca-certificates.crt || test -f /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"}}
     ],
     "podman.rootless-prerequisites": [
-      {"families": ["apt"], "ids": ["ubuntu", "debian", "raspbian", "linuxmint", "pop"], "run": "{{sudo}}apt install -y {{packages}} passt",
-       "ci": {"packages": ["uidmap", "slirp4netns"], "before": "apt-get update",
+      {"families": ["apt"], "ids": ["ubuntu", "debian", "raspbian", "linuxmint", "pop"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}} passt",
+       "ci": {"packages": ["uidmap", "slirp4netns"],
               "check": "command -v newuidmap && command -v slirp4netns && command -v passt"}},
-      {"families": ["apt"], "ids": ["ubuntu"], "versions": {"below": "24.04"}, "run": "{{sudo}}apt install -y {{packages}}",
-       "ci": {"packages": ["uidmap", "slirp4netns"], "before": "apt-get update",
+      {"families": ["apt"], "ids": ["ubuntu"], "versions": {"below": "24.04"}, "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}}",
+       "ci": {"packages": ["uidmap", "slirp4netns"],
               "check": "command -v newuidmap && command -v slirp4netns"}},
-      {"families": ["apt"], "ids": ["debian"], "versions": {"below": "12"}, "run": "{{sudo}}apt install -y {{packages}}",
-       "ci": {"packages": ["uidmap", "slirp4netns"], "before": "apt-get update",
+      {"families": ["apt"], "ids": ["debian"], "versions": {"below": "12"}, "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}}",
+       "ci": {"packages": ["uidmap", "slirp4netns"],
               "check": "command -v newuidmap && command -v slirp4netns"}},
-      {"families": ["apt"], "ids": ["pop"], "versions": {"below": "24.04"}, "run": "{{sudo}}apt install -y {{packages}}",
+      {"families": ["apt"], "ids": ["pop"], "versions": {"below": "24.04"}, "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}}",
        "ci": {"skip": "no official pop image; the same line as below Ubuntu 24.04, proved there"}},
-      {"families": ["apt"], "ids": ["linuxmint"], "versions": {"below": "22"}, "run": "{{sudo}}apt install -y {{packages}}",
+      {"families": ["apt"], "ids": ["linuxmint"], "versions": {"below": "22"}, "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}}",
        "ci": {"skip": "no official linuxmint image; the same line as below Ubuntu 24.04, proved there"}},
-      {"families": ["apt"], "ids": ["raspbian"], "versions": {"below": "12"}, "run": "{{sudo}}apt install -y {{packages}}",
+      {"families": ["apt"], "ids": ["raspbian"], "versions": {"below": "12"}, "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}}",
        "ci": {"skip": "no official raspbian image; the same line as below Debian 12, proved there"}},
       {"families": ["dnf"], "ids": ["fedora", "rhel", "centos", "rocky", "almalinux"], "run": "{{sudo}}dnf install -y {{packages}}",
        "ci": {"packages": ["slirp4netns"], "check": "command -v slirp4netns"}}
+    ],
+    "engine.docker.rootless-prepare": [
+      {"families": ["dnf"], "ids": ["fedora", "rhel", "centos", "rocky", "almalinux"], "run": "PATH=\"$PATH:/usr/sbin:/sbin\"; f=/etc/modules-load.d/meshterm-rootless-docker.conf; pk=; for p in shadow-utils slirp4netns; do rpm -q \"$p\" >/dev/null 2>&1 || pk=\"$pk $p\"; done; if [ -n \"$pk\" ]; then {{sudo}}dnf install -y $pk; fi && { case $(iptables --version 2>/dev/null) in *legacy*) need=ip_tables;; *) need=nf_tables;; esac; ok=; for m in nf_tables ip_tables; do grep -qw \"^$m\" /proc/modules || grep -qw \"$m.ko\" \"/lib/modules/$(uname -r)/modules.builtin\" 2>/dev/null || {{sudo}}modprobe \"$m\" 2>/dev/null; grep -qw \"^$m\" /proc/modules && ok=\"$ok $m\"; done; case \" $ok \" in *\" $need \"*) ;; *) echo \"Could not load the $need kernel module: ask the server admin\"; false;; esac; } && if [ -n \"$ok\" ] && [ ! -f \"$f\" ]; then {{sudo}}mkdir -p /etc/modules-load.d && for m in $ok; do echo \"$m\"; done | {{sudo}}tee \"$f\" >/dev/null; fi && if [ -d /run/systemd/system ] && ! loginctl show-user {{user}} -p Linger 2>/dev/null | grep -q =yes; then {{sudo}}loginctl enable-linger {{user}}; fi",
+       "ci": {"before": ". /etc/os-release && r=rhel && [ \"$ID\" = fedora ] && r=fedora; curl -fsSL \"https://download.docker.com/linux/$r/docker-ce.repo\" -o /etc/yum.repos.d/docker-ce.repo && dnf install -y -q docker-ce docker-ce-rootless-extras >/dev/null && { id mt >/dev/null 2>&1 || useradd -m -s /bin/sh mt; } && { command -v su >/dev/null || dnf install -y -q util-linux >/dev/null; }", "check": "grep -qx nf_tables /etc/modules-load.d/meshterm-rootless-docker.conf && su mt -s /bin/sh -c 'cd && dockerd-rootless-setuptool.sh check'"}},
+      {"families": ["unknown"], "ids": ["ol", "nobara"], "run": "PATH=\"$PATH:/usr/sbin:/sbin\"; f=/etc/modules-load.d/meshterm-rootless-docker.conf; pk=; for p in shadow-utils slirp4netns; do rpm -q \"$p\" >/dev/null 2>&1 || pk=\"$pk $p\"; done; if [ -n \"$pk\" ]; then {{sudo}}dnf install -y $pk; fi && { case $(iptables --version 2>/dev/null) in *legacy*) need=ip_tables;; *) need=nf_tables;; esac; ok=; for m in nf_tables ip_tables; do grep -qw \"^$m\" /proc/modules || grep -qw \"$m.ko\" \"/lib/modules/$(uname -r)/modules.builtin\" 2>/dev/null || {{sudo}}modprobe \"$m\" 2>/dev/null; grep -qw \"^$m\" /proc/modules && ok=\"$ok $m\"; done; case \" $ok \" in *\" $need \"*) ;; *) echo \"Could not load the $need kernel module: ask the server admin\"; false;; esac; } && if [ -n \"$ok\" ] && [ ! -f \"$f\" ]; then {{sudo}}mkdir -p /etc/modules-load.d && for m in $ok; do echo \"$m\"; done | {{sudo}}tee \"$f\" >/dev/null; fi && if [ -d /run/systemd/system ] && ! loginctl show-user {{user}} -p Linger 2>/dev/null | grep -q =yes; then {{sudo}}loginctl enable-linger {{user}}; fi",
+       "ci": {"skip": "Oracle Linux and Nobara: the dnf text, proved on fedora and rocky 9"}},
+      {"families": ["apt"], "ids": ["debian", "ubuntu", "raspbian", "linuxmint", "pop"], "run": "PATH=\"$PATH:/usr/sbin:/sbin\"; f=/etc/modules-load.d/meshterm-rootless-docker.conf; pk=; for p in uidmap slirp4netns dbus-user-session; do dpkg -s \"$p\" >/dev/null 2>&1 || pk=\"$pk $p\"; done; if [ -n \"$pk\" ]; then {{sudo}}apt-get update && {{sudo}}apt-get install -y $pk; fi && { case $(iptables --version 2>/dev/null) in *legacy*) need=ip_tables;; *) need=nf_tables;; esac; ok=; for m in nf_tables ip_tables; do grep -qw \"^$m\" /proc/modules || grep -qw \"$m.ko\" \"/lib/modules/$(uname -r)/modules.builtin\" 2>/dev/null || {{sudo}}modprobe \"$m\" 2>/dev/null; grep -qw \"^$m\" /proc/modules && ok=\"$ok $m\"; done; case \" $ok \" in *\" $need \"*) ;; *) echo \"Could not load the $need kernel module: ask the server admin\"; false;; esac; } && if [ -n \"$ok\" ] && [ ! -f \"$f\" ]; then {{sudo}}mkdir -p /etc/modules-load.d && for m in $ok; do echo \"$m\"; done | {{sudo}}tee \"$f\" >/dev/null; fi && if [ \"$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)\" = 1 ] && ! grep -rqs \"{{path}}\" /etc/apparmor.d; then a=$(echo {{path}} | sed -e 's@^/@@' -e 's@/@.@g') && { echo 'abi <abi/4.0>,'; echo 'include <tunables/global>'; echo '\"{{path}}\" flags=(unconfined) {'; echo '  userns,'; echo '}'; } | {{sudo}}tee \"/etc/apparmor.d/$a\" >/dev/null && {{sudo}}systemctl restart apparmor.service; fi && if [ -d /run/systemd/system ] && ! loginctl show-user {{user}} -p Linger 2>/dev/null | grep -q =yes; then {{sudo}}loginctl enable-linger {{user}}; fi",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq ca-certificates curl >/dev/null && install -m 0755 -d /etc/apt/keyrings && . /etc/os-release && curl -fsSL \"https://download.docker.com/linux/$ID/gpg\" -o /etc/apt/keyrings/docker.asc && echo \"deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$ID $VERSION_CODENAME stable\" > /etc/apt/sources.list.d/docker.list && apt-get update -qq && apt-get install -y -qq --no-install-recommends docker-ce docker-ce-rootless-extras >/dev/null && rm -rf /var/lib/apt/lists/* && { id mt >/dev/null 2>&1 || useradd -m -s /bin/sh mt; }", "path": "/usr/bin/rootlesskit", "check": "su mt -s /bin/sh -c 'cd && dockerd-rootless-setuptool.sh check'"}},
+      {"families": ["unknown"], "ids": ["kali"], "run": "PATH=\"$PATH:/usr/sbin:/sbin\"; f=/etc/modules-load.d/meshterm-rootless-docker.conf; pk=; for p in uidmap slirp4netns dbus-user-session; do dpkg -s \"$p\" >/dev/null 2>&1 || pk=\"$pk $p\"; done; if [ -n \"$pk\" ]; then {{sudo}}apt-get update && {{sudo}}apt-get install -y $pk; fi && { case $(iptables --version 2>/dev/null) in *legacy*) need=ip_tables;; *) need=nf_tables;; esac; ok=; for m in nf_tables ip_tables; do grep -qw \"^$m\" /proc/modules || grep -qw \"$m.ko\" \"/lib/modules/$(uname -r)/modules.builtin\" 2>/dev/null || {{sudo}}modprobe \"$m\" 2>/dev/null; grep -qw \"^$m\" /proc/modules && ok=\"$ok $m\"; done; case \" $ok \" in *\" $need \"*) ;; *) echo \"Could not load the $need kernel module: ask the server admin\"; false;; esac; } && if [ -n \"$ok\" ] && [ ! -f \"$f\" ]; then {{sudo}}mkdir -p /etc/modules-load.d && for m in $ok; do echo \"$m\"; done | {{sudo}}tee \"$f\" >/dev/null; fi && if [ \"$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)\" = 1 ] && ! grep -rqs \"{{path}}\" /etc/apparmor.d; then a=$(echo {{path}} | sed -e 's@^/@@' -e 's@/@.@g') && { echo 'abi <abi/4.0>,'; echo 'include <tunables/global>'; echo '\"{{path}}\" flags=(unconfined) {'; echo '  userns,'; echo '}'; } | {{sudo}}tee \"/etc/apparmor.d/$a\" >/dev/null && {{sudo}}systemctl restart apparmor.service; fi && if [ -d /run/systemd/system ] && ! loginctl show-user {{user}} -p Linger 2>/dev/null | grep -q =yes; then {{sudo}}loginctl enable-linger {{user}}; fi",
+       "ci": {"skip": "Kali: the apt text, proved on Debian and Ubuntu (no kali image in the matrix)"}}
+    ],
+    "engine.docker.rootless-setup-and-start": [
+      {"families": ["any"], "run": "systemctl --user is-active --quiet docker || { dockerd-rootless-setuptool.sh install && systemctl --user enable --now docker; }",
+       "ci": {"skip": "no systemd user manager in a container"}}
+    ],
+    "engine.docker.install-complete": [
+      {"families": ["apt"], "ids": ["ubuntu", "linuxmint", "pop"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y docker.io docker-compose-v2",
+       "ci": {"check": "docker compose version"}},
+      {"families": ["apt"], "ids": ["debian", "raspbian"], "versions": {"min": "13"}, "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y docker.io docker-compose",
+       "ci": {"check": "docker compose version"}},
+      {"families": ["apt"], "ids": ["debian", "raspbian"], "versions": {"below": "13"}, "run": "curl -fsSL https://get.docker.com | sh", "admin": true,
+       "ci": {"needs": ["curl", "caCertificates"], "check": "docker compose version", "rootOnly": "the script calls sudo itself; the sudo-user pass is the same script"}}
+    ],
+    "engine.docker.rootless-setup": [
+      {"families": ["any"], "run": "dockerd-rootless-setuptool.sh install",
+       "ci": {"skip": "rootlesskit needs a real user namespace (measured: fork/exec /proc/self/exe: operation not permitted)"}}
+    ],
+    "engine.docker.rootless-enable": [
+      {"families": ["any"], "run": "systemctl --user enable --now docker",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.docker.rootless-start": [
+      {"families": ["any"], "run": "systemctl --user start docker",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.rootless.linger": [
+      {"families": ["any"], "run": "{{sudo}}loginctl enable-linger {{user}}",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.rootless.apparmor-userns": [
+      {"families": ["any"], "run": "f=$(echo {{path}} | sed -e 's@^/@@' -e 's@/@.@g') && { echo 'abi <abi/4.0>,'; echo 'include <tunables/global>'; echo '\"{{path}}\" flags=(unconfined) {'; echo '  userns,'; echo '}'; } | {{sudo}}tee \"/etc/apparmor.d/$f\" >/dev/null && {{sudo}}systemctl restart apparmor.service",
+       "ci": {"before": "mkdir -p /etc/apparmor.d /usr/local/bin && printf '#!/bin/sh\\nexit 0\\n' > /usr/local/bin/systemctl && chmod +x /usr/local/bin/systemctl", "path": "/usr/bin/rootlesskit", "check": "printf 'abi <abi/4.0>,\\ninclude <tunables/global>\\n\\\"/usr/bin/rootlesskit\\\" flags=(unconfined) {\\n  userns,\\n}\\n' | cmp - /etc/apparmor.d/usr.bin.rootlesskit", "skipOn": {"debian:12": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "debian:13": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "ubuntu:22.04": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "fedora:latest": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "rockylinux/rockylinux:9": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "alpine:3.20": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "amazonlinux:2023": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "archlinux:latest": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "opensuse/leap:15.6": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)"}}}
+    ],
+    "engine.docker.start-service-systemd": [
+      {"families": ["any"], "run": "{{sudo}}systemctl start docker",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.docker.start-socket-systemd": [
+      {"families": ["any"], "run": "{{sudo}}systemctl start docker.socket",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.containerd.rootless-setup": [
+      {"families": ["any"], "run": "containerd-rootless-setuptool.sh install",
+       "ci": {"skip": "rootlesskit needs a real user namespace"}}
+    ],
+    "engine.containerd.start-service-systemd": [
+      {"families": ["any"], "run": "{{sudo}}systemctl start containerd",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.docker.start-service": [
+      {"families": ["any"], "run": "{{sudo}}service docker start",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq docker.io >/dev/null", "check": "sleep 3; pgrep dockerd", "skipOn": {"debian:13": "the init.d script path: proved on debian:12 with docker.io", "ubuntu:22.04": "the init.d script path: proved on debian:12 with docker.io", "ubuntu:24.04": "the init.d script path: proved on debian:12 with docker.io", "fedora:latest": "the init.d script path: proved on debian:12 with docker.io", "rockylinux/rockylinux:9": "the init.d script path: proved on debian:12 with docker.io", "alpine:3.20": "the init.d script path: proved on debian:12 with docker.io", "amazonlinux:2023": "the init.d script path: proved on debian:12 with docker.io", "archlinux:latest": "the init.d script path: proved on debian:12 with docker.io", "opensuse/leap:15.6": "the init.d script path: proved on debian:12 with docker.io"}}}
+    ],
+    "engine.containerd.start-service": [
+      {"families": ["any"], "run": "{{sudo}}service containerd start",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq containerd >/dev/null", "check": "sleep 3; pgrep containerd", "xfail": {"debian:12": "whether containerd ships an init script is unmeasured (docs/recipes-v3-plan.md uncertain 5)"}, "skipOn": {"debian:13": "the init.d script path: measured on debian:12", "ubuntu:22.04": "the init.d script path: measured on debian:12", "ubuntu:24.04": "the init.d script path: measured on debian:12", "fedora:latest": "the init.d script path: measured on debian:12", "rockylinux/rockylinux:9": "the init.d script path: measured on debian:12", "alpine:3.20": "the init.d script path: measured on debian:12", "amazonlinux:2023": "the init.d script path: measured on debian:12", "archlinux:latest": "the init.d script path: measured on debian:12", "opensuse/leap:15.6": "the init.d script path: measured on debian:12"}}}
+    ],
+    "sudo.install": [
+      {"families": ["apt"], "run": "apt-get update && apt-get install -y {{packages}} && usermod -aG {{group}} {{user}}", "admin": true,
+       "ci": {"packages": ["sudo"], "group": "sudo", "rootOnly": "root sets sudo up (the app wraps it in su -c)", "before": "id mt >/dev/null 2>&1 || useradd -m -s /bin/sh mt", "check": "command -v sudo && id -nG mt | grep -qwE 'sudo|wheel'"}},
+      {"families": ["dnf"], "run": "dnf install -y {{packages}} && usermod -aG {{group}} {{user}}", "admin": true,
+       "ci": {"packages": ["sudo"], "group": "wheel", "rootOnly": "root sets sudo up (the app wraps it in su -c)", "before": "id mt >/dev/null 2>&1 || useradd -m -s /bin/sh mt", "check": "command -v sudo && id -nG mt | grep -qwE 'sudo|wheel'"}},
+      {"families": ["apk"], "run": "apk add {{packages}} && addgroup {{user}} {{group}} && echo \"%wheel ALL=(ALL:ALL) ALL\" > /etc/sudoers.d/wheel", "admin": true,
+       "ci": {"packages": ["sudo"], "group": "wheel", "rootOnly": "root sets sudo up (the app wraps it in su -c)", "before": "id mt >/dev/null 2>&1 || adduser -D -s /bin/sh mt", "check": "command -v sudo && id -nG mt | grep -qwE 'sudo|wheel'"}},
+      {"families": ["unknown"], "run": "w=; p=\"{{packages}}\" && if command -v apt-get >/dev/null; then apt-get update && apt-get install -y $p; elif command -v dnf >/dev/null; then dnf install -y $p; elif command -v yum >/dev/null; then yum install -y $p; elif command -v zypper >/dev/null; then zypper install -y $p && w=1; elif command -v pacman >/dev/null; then pacman -S --noconfirm $p && w=1; else echo \"No apt-get, dnf, yum, zypper or pacman here: install $p with this system's tools\"; false; fi && { usermod -aG {{group}} {{user}} || usermod -aG wheel {{user}}; } && { [ -z \"$w\" ] || { echo \"%wheel ALL=(ALL:ALL) ALL\" > /etc/sudoers.d/10-meshterm-wheel.new && visudo -cf /etc/sudoers.d/10-meshterm-wheel.new && mv /etc/sudoers.d/10-meshterm-wheel.new /etc/sudoers.d/10-meshterm-wheel || { rm -f /etc/sudoers.d/10-meshterm-wheel.new; false; }; }; }", "admin": true,
+       "ci": {"packages": ["sudo"], "group": "sudo", "rootOnly": "root sets sudo up (the app wraps it in su -c)", "before": "id mt >/dev/null 2>&1 || useradd -m -s /bin/sh mt || adduser -D -s /bin/sh mt", "check": "command -v sudo && id -nG mt | grep -qwE 'sudo|wheel' && { ! command -v pacman >/dev/null && ! command -v zypper >/dev/null || visudo -c; }", "skipOn": {"alpine:3.20": "BusyBox has no usermod (the app gives Alpine its apk line)"}}}
+    ],
+    "sudo.grant": [
+      {"families": ["apt"], "run": "{{sudo}}usermod -aG {{group}} {{user}}",
+       "ci": {"group": "sudo", "userOnly": "root is never made a sudoer", "check": "id -nG \"$MT_USER\" | grep -qw sudo"}},
+      {"families": ["dnf"], "run": "{{sudo}}usermod -aG {{group}} {{user}}",
+       "ci": {"group": "wheel", "userOnly": "root is never made a sudoer", "check": "id -nG \"$MT_USER\" | grep -qw wheel"}},
+      {"families": ["unknown"], "run": "{{sudo}}usermod -aG {{group}} {{user}} || {{sudo}}usermod -aG wheel {{user}}",
+       "ci": {"group": "sudo", "userOnly": "root is never made a sudoer", "check": "id -nG \"$MT_USER\" | grep -qwE 'sudo|wheel'", "skipOn": {"alpine:3.20": "BusyBox has no usermod (the app gives Alpine its sudo set-up line)"}}}
+    ],
+    "ssh-server.install": [
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y openssh-server",
+       "ci": {"check": "test -x /usr/sbin/sshd"}},
+      {"families": ["dnf"], "run": "{{sudo}}dnf install -y openssh-server && {{sudo}}systemctl enable --now sshd",
+       "ci": {"skip": "starts sshd through systemd"}},
+      {"families": ["apk"], "run": "{{sudo}}apk add openssh && {{sudo}}rc-update add sshd && {{sudo}}rc-service sshd start",
+       "ci": {"skip": "starts sshd through OpenRC"}}
+    ],
+    "sshd.reload": [
+      {"families": ["any"], "run": "{{sudo}}systemctl reload ssh || {{sudo}}systemctl reload sshd",
+       "ci": {"skip": "systemd is not running in a container"}},
+      {"families": ["apk"], "run": "{{sudo}}rc-service sshd reload",
+       "ci": {"skip": "OpenRC is not running in a container"}}
+    ],
+    "sshd.host-keys": [
+      {"families": ["any"], "run": "{{sudo}}ssh-keygen -A",
+       "ci": {"before": "if command -v apt-get >/dev/null; then apt-get update -qq && apt-get install -y -qq openssh-client; elif command -v apk >/dev/null; then apk add -q openssh-keygen; elif command -v pacman >/dev/null; then pacman -Sy --noconfirm openssh; elif command -v zypper >/dev/null; then zypper -n -q install openssh-clients; elif command -v dnf >/dev/null; then dnf install -y -q openssh; else yum install -y -q openssh; fi; mkdir -p /etc/ssh", "check": "test -f /etc/ssh/ssh_host_ed25519_key"}}
+    ],
+    "tailscale.up-ssh": [
+      {"families": ["any"], "run": "{{sudo}}tailscale up --ssh",
+       "ci": {"skip": "tailscaled is not running in a container"}}
+    ],
+    "tailscale.set-ssh": [
+      {"families": ["any"], "run": "{{sudo}}tailscale set --ssh",
+       "ci": {"skip": "tailscaled is not running in a container"}}
+    ],
+    "firewall.ufw.allow": [
+      {"families": ["any"], "run": "{{sudo}}ufw allow {{port}}/{{proto}}",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq ufw", "port": 49820, "proto": "udp", "check": "ufw show added | grep -q 49820", "skipOn": {"fedora:latest": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "rockylinux/rockylinux:9": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "alpine:3.20": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "amazonlinux:2023": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "archlinux:latest": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "opensuse/leap:15.6": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)"}}}
+    ],
+    "firewall.ufw.allow-from-tailnet": [
+      {"families": ["any"], "run": "{{sudo}}ufw allow from 100.64.0.0/10 to any port {{port}} proto {{proto}}",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq ufw", "port": 49820, "proto": "udp", "check": "ufw show added | grep -q 49820", "skipOn": {"fedora:latest": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "rockylinux/rockylinux:9": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "alpine:3.20": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "amazonlinux:2023": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "archlinux:latest": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "opensuse/leap:15.6": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)"}}}
+    ],
+    "firewall.ufw.allow-on-tailscale0": [
+      {"families": ["any"], "run": "{{sudo}}ufw allow in on tailscale0 to any port {{port}} proto {{proto}}",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq ufw", "port": 49820, "proto": "udp", "check": "ufw show added | grep -q 49820", "skipOn": {"fedora:latest": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "rockylinux/rockylinux:9": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "alpine:3.20": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "amazonlinux:2023": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "archlinux:latest": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "opensuse/leap:15.6": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)"}}}
+    ],
+    "firewall.firewalld.allow-ssh": [
+      {"families": ["any"], "run": "{{sudo}}firewall-cmd --permanent --add-service=ssh && {{sudo}}firewall-cmd --reload",
+       "ci": {"skip": "no firewalld daemon in a container"}}
+    ],
+    "firewall.firewalld.allow": [
+      {"families": ["any"], "run": "{{sudo}}firewall-cmd --permanent --add-port={{port}}/{{proto}} && {{sudo}}firewall-cmd --reload",
+       "ci": {"skip": "no firewalld daemon in a container"}}
+    ],
+    "firewall.firewalld.allow-from-tailnet": [
+      {"families": ["any"], "run": "{{sudo}}firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=100.64.0.0/10 port port={{port}} protocol={{proto}} accept' && {{sudo}}firewall-cmd --reload",
+       "ci": {"skip": "no firewalld daemon in a container"}}
+    ],
+    "firewall.nft.allow": [
+      {"families": ["any"], "run": "{{sudo}}nft list chain inet filter input >/dev/null 2>&1 && {{sudo}}nft add rule inet filter input {{proto}} dport {{port}} accept || { echo \"No inet filter input chain here: use firewalld or ufw\"; false; }",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq nftables >/dev/null", "port": 49820, "proto": "udp", "check": "nft list chain inet filter input | grep -q 49820", "xfail": {"debian:12": "no CAP_NET_ADMIN in a container: proves the guard (no inet filter input chain: the message and a non-zero exit)"}, "skipOn": {"debian:13": "the guard path: proved on debian:12", "ubuntu:22.04": "the guard path: proved on debian:12", "ubuntu:24.04": "the guard path: proved on debian:12", "fedora:latest": "the guard path: proved on debian:12", "rockylinux/rockylinux:9": "the guard path: proved on debian:12", "alpine:3.20": "the guard path: proved on debian:12", "amazonlinux:2023": "the guard path: proved on debian:12", "archlinux:latest": "the guard path: proved on debian:12", "opensuse/leap:15.6": "the guard path: proved on debian:12"}}}
+    ],
+    "firewall.nft.allow-from-tailnet": [
+      {"families": ["any"], "run": "{{sudo}}nft list chain inet filter input >/dev/null 2>&1 && {{sudo}}nft add rule inet filter input ip saddr 100.64.0.0/10 {{proto}} dport {{port}} accept || { echo \"No inet filter input chain here: use firewalld or ufw\"; false; }",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq nftables >/dev/null", "port": 49820, "proto": "udp", "check": "nft list chain inet filter input | grep -q 49820", "xfail": {"debian:12": "no CAP_NET_ADMIN in a container: proves the guard (no inet filter input chain: the message and a non-zero exit)"}, "skipOn": {"debian:13": "the guard path: proved on debian:12", "ubuntu:22.04": "the guard path: proved on debian:12", "ubuntu:24.04": "the guard path: proved on debian:12", "fedora:latest": "the guard path: proved on debian:12", "rockylinux/rockylinux:9": "the guard path: proved on debian:12", "alpine:3.20": "the guard path: proved on debian:12", "amazonlinux:2023": "the guard path: proved on debian:12", "archlinux:latest": "the guard path: proved on debian:12", "opensuse/leap:15.6": "the guard path: proved on debian:12"}}}
+    ],
+    "firewall.iptables.allow": [
+      {"families": ["any"], "run": "{{sudo}}iptables -A INPUT -p {{proto}} --dport {{port}} -j ACCEPT",
+       "ci": {"skip": "no CAP_NET_ADMIN in a container"}}
+    ],
+    "firewall.iptables.allow-from-tailnet": [
+      {"families": ["any"], "run": "{{sudo}}iptables -A INPUT -p {{proto}} --dport {{port}} -s 100.64.0.0/10 -j ACCEPT",
+       "ci": {"skip": "no CAP_NET_ADMIN in a container"}}
+    ],
+    "agent.claude.install-official": [
+      {"families": ["any"], "run": "curl -fsSL https://claude.ai/install.sh -o ~/.mt-install-claude.sh && bash ~/.mt-install-claude.sh && rm -f ~/.mt-install-claude.sh",
+       "ci": {"needs": ["curl", "caCertificates", "bash"], "check": "eval test -x ~$MT_USER/.local/bin/claude", "skipOn": {"debian:13": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:22.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:24.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "fedora:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "rockylinux/rockylinux:9": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "amazonlinux:2023": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "archlinux:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "opensuse/leap:15.6": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20"}}}
+    ],
+    "agent.claude.install-homebrew": [
+      {"families": ["any"], "run": "brew install --cask claude-code",
+       "ci": {"skip": "Homebrew is not in the matrix"}}
+    ],
+    "agent.claude.install-npm": [
+      {"families": ["any"], "run": "npm install -g --prefix \"$HOME/.local\" @anthropic-ai/claude-code",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq npm >/dev/null", "check": "eval test -x ~$MT_USER/.local/bin/claude", "skipOn": {"debian:13": "npm from Debian's packages: proved on debian:12", "ubuntu:22.04": "npm from Debian's packages: proved on debian:12", "ubuntu:24.04": "npm from Debian's packages: proved on debian:12", "fedora:latest": "npm from Debian's packages: proved on debian:12", "rockylinux/rockylinux:9": "npm from Debian's packages: proved on debian:12", "alpine:3.20": "npm from Debian's packages: proved on debian:12", "amazonlinux:2023": "npm from Debian's packages: proved on debian:12", "archlinux:latest": "npm from Debian's packages: proved on debian:12", "opensuse/leap:15.6": "npm from Debian's packages: proved on debian:12"}}}
+    ],
+    "agent.codex.install-official": [
+      {"families": ["any"], "run": "curl -fsSL https://chatgpt.com/codex/install.sh -o ~/.mt-install-codex.sh && env CODEX_NON_INTERACTIVE=1 sh ~/.mt-install-codex.sh && rm -f ~/.mt-install-codex.sh",
+       "ci": {"needs": ["curl", "caCertificates", "bash"], "check": "eval test -x ~$MT_USER/.local/bin/codex", "skipOn": {"debian:13": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:22.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:24.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "fedora:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "rockylinux/rockylinux:9": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "amazonlinux:2023": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "archlinux:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "opensuse/leap:15.6": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20"}}}
+    ],
+    "agent.codex.install-homebrew": [
+      {"families": ["any"], "run": "brew install --cask codex",
+       "ci": {"skip": "Homebrew is not in the matrix"}}
+    ],
+    "agent.codex.install-npm": [
+      {"families": ["any"], "run": "npm install -g --prefix \"$HOME/.local\" @openai/codex",
+       "ci": {"before": "apt-get update -qq && apt-get install -y -qq npm >/dev/null", "check": "eval test -x ~$MT_USER/.local/bin/codex", "skipOn": {"debian:13": "npm from Debian's packages: proved on debian:12", "ubuntu:22.04": "npm from Debian's packages: proved on debian:12", "ubuntu:24.04": "npm from Debian's packages: proved on debian:12", "fedora:latest": "npm from Debian's packages: proved on debian:12", "rockylinux/rockylinux:9": "npm from Debian's packages: proved on debian:12", "alpine:3.20": "npm from Debian's packages: proved on debian:12", "amazonlinux:2023": "npm from Debian's packages: proved on debian:12", "archlinux:latest": "npm from Debian's packages: proved on debian:12", "opensuse/leap:15.6": "npm from Debian's packages: proved on debian:12"}}}
+    ],
+    "agent.agy.install-official": [
+      {"families": ["any"], "run": "curl -fsSL https://antigravity.google/cli/install.sh -o ~/.mt-install-agy.sh && bash ~/.mt-install-agy.sh && rm -f ~/.mt-install-agy.sh",
+       "ci": {"needs": ["curl", "caCertificates", "bash"], "check": "eval test -x ~$MT_USER/.local/bin/agy", "xfail": {"alpine:3.20": "unmeasured on musl (docs/recipes-v3-plan.md section 7)"}, "skipOn": {"debian:13": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:22.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:24.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "fedora:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "rockylinux/rockylinux:9": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "amazonlinux:2023": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "archlinux:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "opensuse/leap:15.6": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20"}}}
+    ],
+    "herdr.install": [
+      {"families": ["any"], "run": "curl -fsSL https://herdr.dev/install.sh -o ~/.mt-install-herdr.sh && sh ~/.mt-install-herdr.sh && rm -f ~/.mt-install-herdr.sh",
+       "ci": {"needs": ["curl", "awk", "sha256sum"], "check": "eval test -x ~$MT_USER/.local/bin/herdr", "xfail": {"alpine:3.20": "herdr ships a glibc build"}, "skipOn": {"debian:13": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:22.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:24.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "fedora:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "rockylinux/rockylinux:9": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "amazonlinux:2023": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "archlinux:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "opensuse/leap:15.6": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20"}}}
     ]
   }
 }

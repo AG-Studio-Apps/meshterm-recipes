@@ -1,0 +1,312 @@
+{
+ "_comment": "docs/recipes-v3-plan.md (meshTerm) section 6.3: every app-visible change serial 3 makes against serial 2 plus ci/serial3-baseline.json's NEW intents and package ids (the app's code text moved as it was). scripts/validate.py --declared checks both directions; meshTerm's tests read a byte-identical copy.",
+ "changes": [
+  {
+   "intent": "engine.docker.rootless-prepare",
+   "selector": {
+    "families": [
+     "dnf"
+    ],
+    "ids": [
+     "fedora",
+     "rhel",
+     "centos",
+     "rocky",
+     "almalinux"
+    ]
+   },
+   "reason": "Fedora/EL rootless Docker: packages, the iptables kernel modules (loaded and persisted) and linger in ONE admin step before the setuptool (the Fedora device failure: 'modprobe ip_tables')"
+  },
+  {
+   "intent": "engine.docker.rootless-prepare",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "ol",
+     "nobara"
+    ]
+   },
+   "reason": "Oracle Linux and Nobara (an unknown family to the app): the dnf preparation"
+  },
+  {
+   "intent": "engine.docker.rootless-prepare",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "debian",
+     "ubuntu",
+     "raspbian",
+     "linuxmint",
+     "pop"
+    ]
+   },
+   "reason": "Debian family (owner override of answer 10): uidmap, slirp4netns, dbus-user-session, the kernel modules, the AppArmor profile where needed and linger, in ONE admin step"
+  },
+  {
+   "intent": "engine.docker.rootless-prepare",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "kali"
+    ]
+   },
+   "reason": "Kali (an unknown family to the app): the apt preparation, unmeasured"
+  },
+  {
+   "intent": "engine.docker.rootless-setup-and-start",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "3.7: set up and start rootless Docker in ONE user step, skipped when it already runs"
+  },
+  {
+   "intent": "engine.docker.install-complete",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "ubuntu",
+     "linuxmint",
+     "pop"
+    ]
+   },
+   "reason": "3.7: Docker with Compose v2 in one admin line on Ubuntu, Mint and Pop (docker.io + docker-compose-v2)"
+  },
+  {
+   "intent": "engine.docker.install-complete",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "debian",
+     "raspbian"
+    ],
+    "versions": {
+     "min": "13"
+    }
+   },
+   "reason": "3.7: Debian 13 and Raspberry Pi OS 13 ship Compose v2 as docker-compose (2.26.1, meshDeck's floor); RPi OS 13 assumed to match Debian 13 (no image)"
+  },
+  {
+   "intent": "engine.docker.install-complete",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "debian",
+     "raspbian"
+    ],
+    "versions": {
+     "below": "13"
+    }
+   },
+   "reason": "3.7: Debian 12 has no Compose v2 package: Docker's repository via its script"
+  },
+  {
+   "intent": "engine.docker.start-service",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "should-fix 1: a non-systemd, non-OpenRC host (WSL2 without systemd, Devuan) gets service docker start instead of a systemctl line"
+  },
+  {
+   "intent": "engine.containerd.start-service",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "should-fix 1: the same for containerd (whether containerd ships an init script is unmeasured, uncertain 5)"
+  },
+  {
+   "intent": "compose.install-docker-repo",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "debian",
+     "raspbian"
+    ],
+    "versions": {
+     "min": "13"
+    }
+   },
+   "reason": "3.7: an installed docker.io on Debian 13 gets Compose from the distribution (docker-compose) instead of replacing the engine with Docker's"
+  },
+  {
+   "intent": "podman.rootless-prerequisites",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "debian",
+     "ubuntu",
+     "raspbian",
+     "linuxmint",
+     "pop"
+    ]
+   },
+   "reason": "A11: refresh the package lists first (a fresh image has none) and use apt-get"
+  },
+  {
+   "intent": "podman.rootless-prerequisites",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "ubuntu"
+    ],
+    "versions": {
+     "below": "24.04"
+    }
+   },
+   "reason": "A11: refresh the package lists first and use apt-get"
+  },
+  {
+   "intent": "podman.rootless-prerequisites",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "debian"
+    ],
+    "versions": {
+     "below": "12"
+    }
+   },
+   "reason": "A11: refresh the package lists first and use apt-get"
+  },
+  {
+   "intent": "podman.rootless-prerequisites",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "pop"
+    ],
+    "versions": {
+     "below": "24.04"
+    }
+   },
+   "reason": "A11: refresh the package lists first and use apt-get"
+  },
+  {
+   "intent": "podman.rootless-prerequisites",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "linuxmint"
+    ],
+    "versions": {
+     "below": "22"
+    }
+   },
+   "reason": "A11: refresh the package lists first and use apt-get"
+  },
+  {
+   "intent": "podman.rootless-prerequisites",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "raspbian"
+    ],
+    "versions": {
+     "below": "12"
+    }
+   },
+   "reason": "A11: refresh the package lists first and use apt-get"
+  },
+  {
+   "intent": "sudo.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ]
+   },
+   "reason": "A14 for .other hosts (Amazon Linux, openSUSE, Arch, Kali): detect the package manager at run time; zypper and pacman get a visudo-checked wheel drop-in (review 11)"
+  },
+  {
+   "intent": "sudo.grant",
+   "selector": {
+    "families": [
+     "unknown"
+    ]
+   },
+   "reason": "A15 for .other hosts: fall back to wheel where there is no sudo group (review 11)"
+  },
+  {
+   "intent": "sshd.reload",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "9c: an Alpine host the surface knows reloads sshd through OpenRC"
+  },
+  {
+   "intent": "firewall.nft.allow",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "CONFIRMED 8: guard on the inet filter input chain, with a message instead of nft's error"
+  },
+  {
+   "intent": "firewall.nft.allow-from-tailnet",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "CONFIRMED 8: the same guard"
+  },
+  {
+   "package": "sudo",
+   "family": "pacman",
+   "reason": "B1: the sudo package for every family"
+  },
+  {
+   "package": "sudo",
+   "family": "zypper",
+   "reason": "B1: the sudo package for every family"
+  },
+  {
+   "package": "sudo",
+   "family": "yum",
+   "reason": "B1: the sudo package for every family"
+  },
+  {
+   "package": "uidmap",
+   "family": "dnf",
+   "reason": "A11 nit: Fedora/EL have no uidmap package; shadow-utils provides newuidmap"
+  },
+  {
+   "package": "uidmap",
+   "family": "yum",
+   "reason": "A11 nit: as dnf"
+  }
+ ]
+}
