@@ -66,7 +66,7 @@
      "arch"
     ]
    },
-   "reason": "Arch: get.docker.com refuses it ('Unsupported distribution'); Arch's docker package, enabled and started where systemd runs"
+   "reason": "Arch: get.docker.com refuses it ('Unsupported distribution'); Arch's docker package; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself)"
   },
   {
    "intent": "engine.docker.install-script",
@@ -79,7 +79,7 @@
      "manjaro"
     ]
    },
-   "reason": "Manjaro and EndeavourOS (Arch-based): the Arch text"
+   "reason": "Manjaro and EndeavourOS (Arch-based): the Arch text; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself)"
   },
   {
    "intent": "engine.docker.install-script",
@@ -93,7 +93,7 @@
      "opensuse-tumbleweed"
     ]
    },
-   "reason": "openSUSE: get.docker.com refuses it; openSUSE's docker package, enabled and started where systemd runs"
+   "reason": "openSUSE: get.docker.com refuses it; openSUSE's docker package; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself)"
   },
   {
    "intent": "engine.docker.join-group",
@@ -140,6 +140,52 @@
     ]
    },
    "reason": "Alpine: the docker group is created when missing, before the daemon starts (its socket's group) and before the user joins it"
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "amzn"
+    ],
+    "versions": {
+     "min": "2023"
+    }
+   },
+   "reason": "Amazon Linux 2023: dnf install docker; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself)"
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "amzn"
+    ],
+    "versions": {
+     "below": "2023"
+    }
+   },
+   "reason": "Amazon Linux 2: amazon-linux-extras install docker; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself)"
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "almalinux",
+     "centos",
+     "ol",
+     "rhel",
+     "rocky"
+    ]
+   },
+   "reason": "EL and Oracle Linux (Oracle reaches this as an unknown family): Docker CE from Docker's rhel repository; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself)"
   }
  ]
 }
