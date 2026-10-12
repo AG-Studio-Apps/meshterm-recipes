@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ag-studio-apps.github.io/meshterm-recipes/recipes.schema.json",
+  "title": "meshTerm host recipes, schema 1",
+  "description": "Documentation of the format. scripts/validate.py (and the app's own HostRecipeDocument) are authoritative; they also check what JSON Schema cannot (placeholders, a literal sudo or su, coverage, serial rules).",
+  "type": "object",
+  "required": ["kind", "schema", "serial", "date", "packages", "intents"],
+  "properties": {
+    "kind": {"const": "host-recipes"},
+    "schema": {"const": 1},
+    "serial": {"type": "integer", "minimum": 1, "description": "Monotonic. Every change takes the next serial; the app refuses a lower one, and the same one with other bytes."},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"},
+    "packages": {
+      "type": "object",
+      "description": "Package id (the app's HostPackage) -> family -> package name. A family with no entry needs nothing.",
+      "propertyNames": {"pattern": "^[A-Za-z0-9]{1,32}$"},
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {"pattern": "^[a-z0-9-]{1,32}$"},
+        "additionalProperties": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.+_-]{0,63}$"}
+      }
+    },
+    "intents": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$", "maxLength": 64},
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {"$ref": "#/$defs/variant"}
+      }
+    }
+  },
+  "$defs": {
+    "variant": {
+      "type": "object",
+      "required": ["families", "run"],
+      "properties": {
+        "families": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9-]{1,32}$",
+                    "description": "apt, dnf, yum, apk, pacman, zypper, macos, unknown, or any. Others are ignored by today's apps."}
+        },
+        "ids": {"type": "array", "minItems": 1, "uniqueItems": true,
+                "items": {"type": "string", "pattern": "^[a-z0-9._-]{1,64}$"},
+                "description": "/etc/os-release ID values (lowercase)."},
+        "versions": {
+          "type": "object", "minProperties": 1, "additionalProperties": false,
+          "properties": {
+            "min": {"type": "string", "pattern": "^[0-9]{1,9}(\\.[0-9]{1,9}){0,5}$", "description": "VERSION_ID, inclusive."},
+            "below": {"type": "string", "pattern": "^[0-9]{1,9}(\\.[0-9]{1,9}){0,5}$", "description": "VERSION_ID, exclusive."}
+          }
+        },
+        "run": {"type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[ -~]+$",
+                "description": "One line, printable ASCII. Placeholders: {{sudo}} (opens a command), {{user}}, {{packages}}. No literal sudo or su."},
+        "admin": {"type": "boolean", "description": "Needs an administrator even without {{sudo}}. Default: whether it has {{sudo}}."},
+        "ci": {"type": "object", "description": "For scripts/run-recipes.py only; the app ignores it."}
+      }
+    }
+  }
+}

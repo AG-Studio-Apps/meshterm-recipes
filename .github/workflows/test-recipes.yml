@@ -1,0 +1,57 @@
+# Validates recipes.json (the app's own rules, scripts/validate.py) and runs every recipe on a fresh-distro Docker
+# matrix, as root and as a sudo user, asserting each result (scripts/run-recipes.py, each variant's `ci` block).
+#
+# Runs on pull requests, weekly (distro rot: a package renamed or dropped upstream turns this red before a person
+# meets it), on demand, and from publish.yml before anything is signed (workflow_call). No secrets, no write
+# permission; the containers run third-party packages, so the checkout keeps no credentials.
+name: Test recipes
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1"  # Mondays 05:00 UTC
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Self-test the validator
+        run: python3 scripts/validate.py --self-test
+      - name: Validate recipes.json against main
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = pull_request ]; then
+            python3 scripts/validate.py --previous-ref "origin/${GITHUB_BASE_REF}"
+          else
+            python3 scripts/validate.py
+          fi
+
+  distro:
+    name: ${{ matrix.image }} (${{ matrix.mode }})
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep in step with ci/images.json.
+        image: ["debian:12", "ubuntu:22.04", "ubuntu:24.04", "fedora:latest", "rockylinux/rockylinux:9", "alpine:3.20"]
+        mode: [root, user]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run the recipes
+        run: python3 scripts/run-recipes.py --image "${{ matrix.image }}" --mode "${{ matrix.mode }}" --summary "$GITHUB_STEP_SUMMARY"

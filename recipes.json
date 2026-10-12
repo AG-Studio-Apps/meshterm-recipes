@@ -1,0 +1,196 @@
+{
+  "kind": "host-recipes",
+  "schema": 1,
+  "serial": 1,
+  "date": "2026-10-11",
+  "packages": {
+    "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
+    "caCertificates": {"apt": "ca-certificates", "apk": "ca-certificates"},
+    "bash": {"apk": "bash"},
+    "python3": {"apt": "python3", "dnf": "python3", "yum": "python3", "apk": "python3"},
+    "awk": {"apt": "gawk", "dnf": "gawk", "yum": "gawk", "apk": "gawk"},
+    "sha256sum": {"apt": "coreutils", "dnf": "coreutils", "yum": "coreutils", "apk": "coreutils"},
+    "sftpServer": {"apt": "openssh-sftp-server", "dnf": "openssh-server", "yum": "openssh-server", "apk": "openssh-sftp-server"},
+    "bubblewrap": {"apt": "bubblewrap", "dnf": "bubblewrap", "yum": "bubblewrap", "apk": "bubblewrap"},
+    "procps": {"apt": "procps", "dnf": "procps-ng", "yum": "procps-ng", "apk": "procps-ng"}
+  },
+  "intents": {
+    "tmux.install": [
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y tmux",
+       "ci": {"check": "command -v tmux"}},
+      {"families": ["dnf"], "run": "{{sudo}}dnf install -y tmux",
+       "ci": {"check": "command -v tmux"}},
+      {"families": ["yum"], "run": "{{sudo}}yum install -y tmux",
+       "ci": {"check": "command -v tmux"}},
+      {"families": ["pacman"], "run": "{{sudo}}pacman -S --noconfirm tmux",
+       "ci": {"check": "command -v tmux"}},
+      {"families": ["apk"], "run": "{{sudo}}apk add tmux",
+       "ci": {"check": "command -v tmux"}},
+      {"families": ["zypper"], "run": "{{sudo}}zypper install -y tmux",
+       "ci": {"check": "command -v tmux"}},
+      {"families": ["macos"], "run": "brew install tmux",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "packages.install": [
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}}",
+       "ci": {"check": "command -v curl && command -v python3 && command -v gawk && command -v bwrap && command -v ps && test -f /etc/ssl/certs/ca-certificates.crt"}},
+      {"families": ["dnf"], "run": "{{sudo}}dnf install -y {{packages}}",
+       "ci": {"check": "command -v curl && command -v python3 && command -v gawk && command -v bwrap && command -v ps && command -v sha256sum",
+              "xfail": {"rockylinux/rockylinux:9": "EL9 ships curl-minimal, which conflicts with the curl package: dnf refuses the whole line. A candidate fix for a later serial (map curl to nothing on EL9, or --allowerasing)"}}},
+      {"families": ["yum"], "run": "{{sudo}}yum install -y {{packages}}",
+       "ci": {"check": "command -v curl && command -v python3 && command -v gawk && command -v bwrap && command -v ps"}},
+      {"families": ["apk"], "run": "{{sudo}}apk add {{packages}}",
+       "ci": {"check": "command -v curl && command -v python3 && command -v gawk && command -v bwrap && command -v bash && ps -o lstart= -p 1 && test -f /etc/ssl/certs/ca-certificates.crt"}}
+    ],
+    "developer-tools.install": [
+      {"families": ["macos"], "run": "xcode-select --install",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "engine.docker.install-package": [
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y docker.io",
+       "ci": {"check": "command -v docker && command -v dockerd"}}
+    ],
+    "engine.docker.install-script": [
+      {"families": ["apt", "unknown"], "run": "curl -fsSL https://get.docker.com | sh", "admin": true,
+       "ci": {"needs": ["curl", "caCertificates"], "check": "command -v docker && command -v dockerd",
+              "rootOnly": "the script calls sudo itself; the sudo-user pass is the same script",
+              "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers it to apt and unknown hosts only)"},
+              "xfail": {"rockylinux/rockylinux:9": "get.docker.com adds download.docker.com/linux/rocky, which has no docker-ce (measured 2026-10-12). The app offers this script only to apt and unknown hosts; an unknown EL-like host (Oracle, Amazon) may meet it: a candidate fix for a later serial"}}}
+    ],
+    "engine.docker.install-alpine": [
+      {"families": ["apk"], "run": "{{sudo}}apk add docker docker-cli-compose && {{sudo}}rc-update add docker default && {{sudo}}rc-service docker start && {{sudo}}addgroup {{user}} docker",
+       "ci": {"skip": "OpenRC is not running in a container: rc-service cannot start docker there"}}
+    ],
+    "engine.docker.join-group": [
+      {"families": ["apt", "unknown"], "run": "{{sudo}}usermod -aG docker {{user}}",
+       "ci": {"before": "groupadd -f docker", "check": "id -nG \"$MT_USER\" | grep -qw docker", "userOnly": "root never joins the docker group (the app drops this step for root)",
+              "skipOn": {"alpine:3.20": "BusyBox has no usermod (the app offers this to apt and unknown hosts only)"}}}
+    ],
+    "engine.podman.install": [
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y podman",
+       "ci": {"check": "command -v podman"}},
+      {"families": ["dnf"], "run": "{{sudo}}dnf install -y podman",
+       "ci": {"check": "command -v podman"}}
+    ],
+    "engine.docker-desktop.install": [
+      {"families": ["macos"], "run": "brew install --cask docker-desktop",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "engine.orbstack.install": [
+      {"families": ["macos"], "run": "brew install --cask orbstack",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "engine.docker.start-systemd": [
+      {"families": ["any"], "run": "{{sudo}}systemctl enable --now docker",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.docker.start-openrc": [
+      {"families": ["any"], "run": "{{sudo}}rc-service docker start && {{sudo}}rc-update add docker default",
+       "ci": {"skip": "OpenRC is not running in a container"}}
+    ],
+    "engine.podman.start-systemd": [
+      {"families": ["any"], "run": "{{sudo}}systemctl enable --now podman.socket",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.podman.start-systemd-user": [
+      {"families": ["any"], "run": "systemctl --user enable --now podman.socket",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.podman.start-openrc": [
+      {"families": ["any"], "run": "{{sudo}}rc-service podman start && {{sudo}}rc-update add podman default",
+       "ci": {"skip": "OpenRC is not running in a container"}}
+    ],
+    "engine.containerd.start-systemd": [
+      {"families": ["any"], "run": "{{sudo}}systemctl enable --now containerd",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "engine.containerd.start-openrc": [
+      {"families": ["any"], "run": "{{sudo}}rc-service containerd start && {{sudo}}rc-update add containerd default",
+       "ci": {"skip": "OpenRC is not running in a container"}}
+    ],
+    "engine.apple.start": [
+      {"families": ["any"], "run": "container system start",
+       "ci": {"skip": "Apple's container runs on macOS only"}}
+    ],
+    "engine.docker-desktop.open": [
+      {"families": ["macos"], "run": "open -a Docker",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "engine.orbstack.open": [
+      {"families": ["macos"], "run": "open -a OrbStack",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "engine.colima.start": [
+      {"families": ["macos"], "run": "colima start",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "engine.podman-machine.start": [
+      {"families": ["macos"], "run": "podman machine start",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "compose.install-package": [
+      {"families": ["apt"], "ids": ["ubuntu", "linuxmint", "pop"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y docker-compose-v2",
+       "ci": {"check": "test -x /usr/libexec/docker/cli-plugins/docker-compose"}},
+      {"families": ["dnf"], "run": "{{sudo}}dnf install -y docker-compose",
+       "ci": {"check": "command -v docker-compose",
+              "xfail": {"rockylinux/rockylinux:9": "Rocky 9 (and RHEL 9) ship no docker-compose package: a candidate fix for a later serial"}}},
+      {"families": ["apk"], "run": "{{sudo}}apk add docker-cli-compose",
+       "ci": {"check": "test -x /usr/libexec/docker/cli-plugins/docker-compose"}},
+      {"families": ["macos"], "run": "brew install docker-compose",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}}
+    ],
+    "compose.install-docker-repo": [
+      {"families": ["any"], "run": "curl -fsSL https://get.docker.com | sh", "admin": true,
+       "ci": {"needs": ["curl", "caCertificates"], "check": "docker compose version",
+              "rootOnly": "the script calls sudo itself; the sudo-user pass is the same script",
+              "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers this where the stacks probe says Docker's repository: Debian, Raspberry Pi OS)"},
+              "xfail": {"rockylinux/rockylinux:9": "get.docker.com adds download.docker.com/linux/rocky, which has no docker-ce (measured 2026-10-12). The app offers this script only to apt and unknown hosts; an unknown EL-like host (Oracle, Amazon) may meet it: a candidate fix for a later serial"}}}
+    ],
+    "compose.install-binary-docker": [
+      {"families": ["apt", "dnf", "unknown"], "run": "{{sudo}}mkdir -p /usr/local/lib/docker/cli-plugins && {{sudo}}curl -fsSL \"https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)\" -o /usr/local/lib/docker/cli-plugins/docker-compose && {{sudo}}chmod +x /usr/local/lib/docker/cli-plugins/docker-compose",
+       "ci": {"needs": ["curl", "caCertificates"], "check": "/usr/local/lib/docker/cli-plugins/docker-compose version"}}
+    ],
+    "compose.install-binary-podman": [
+      {"families": ["apt", "dnf", "unknown"], "run": "{{sudo}}curl -fsSL \"https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)\" -o /usr/local/bin/docker-compose && {{sudo}}chmod +x /usr/local/bin/docker-compose",
+       "ci": {"needs": ["curl", "caCertificates"], "check": "/usr/local/bin/docker-compose version"}}
+    ],
+    "podman.socket-user": [
+      {"families": ["any"], "run": "{ systemctl --user is-active --quiet podman.socket || systemctl --user enable --now podman.socket; }",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "podman.socket-system": [
+      {"families": ["any"], "run": "{ systemctl is-active --quiet podman.socket || {{sudo}}systemctl enable --now podman.socket; }", "admin": true,
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "git.install": [
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y git",
+       "ci": {"check": "command -v git"}},
+      {"families": ["dnf"], "run": "{{sudo}}dnf install -y git",
+       "ci": {"check": "command -v git"}},
+      {"families": ["apk"], "run": "{{sudo}}apk add git",
+       "ci": {"check": "command -v git"}},
+      {"families": ["macos"], "run": "xcode-select --install",
+       "ci": {"skip": "macOS: not in the Linux container matrix"}},
+      {"families": ["unknown"], "run": "if command -v apt-get >/dev/null; then {{sudo}}apt-get update && {{sudo}}apt-get install -y git; elif command -v dnf >/dev/null; then {{sudo}}dnf install -y git; elif command -v yum >/dev/null; then {{sudo}}yum install -y git; elif command -v apk >/dev/null; then {{sudo}}apk add git; fi",
+       "ci": {"check": "command -v git"}}
+    ],
+    "ca-certificates.install": [
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y ca-certificates",
+       "ci": {"check": "test -f /etc/ssl/certs/ca-certificates.crt"}},
+      {"families": ["dnf"], "run": "{{sudo}}dnf install -y ca-certificates",
+       "ci": {"check": "test -f /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"}},
+      {"families": ["apk"], "run": "{{sudo}}apk add ca-certificates",
+       "ci": {"check": "test -f /etc/ssl/certs/ca-certificates.crt"}},
+      {"families": ["unknown"], "run": "if command -v apt-get >/dev/null; then {{sudo}}apt-get update && {{sudo}}apt-get install -y ca-certificates; elif command -v dnf >/dev/null; then {{sudo}}dnf install -y ca-certificates; elif command -v yum >/dev/null; then {{sudo}}yum install -y ca-certificates; elif command -v apk >/dev/null; then {{sudo}}apk add ca-certificates; fi",
+       "ci": {"check": "test -f /etc/ssl/certs/ca-certificates.crt || test -f /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"}}
+    ],
+    "podman.rootless-prerequisites": [
+      {"families": ["apt"], "ids": ["ubuntu", "debian", "raspbian", "linuxmint", "pop"], "run": "{{sudo}}apt install -y {{packages}} passt",
+       "ci": {"packages": ["uidmap", "slirp4netns"], "before": "apt-get update",
+              "check": "command -v newuidmap && command -v slirp4netns && command -v passt",
+              "xfail": {"ubuntu:22.04": "Ubuntu 22.04 has no passt package: a candidate fix for a later serial"}}},
+      {"families": ["dnf"], "ids": ["fedora", "rhel", "centos", "rocky", "almalinux"], "run": "{{sudo}}dnf install -y {{packages}}",
+       "ci": {"packages": ["slirp4netns"], "check": "command -v slirp4netns"}}
+    ]
+  }
+}

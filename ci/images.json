@@ -1,0 +1,11 @@
+{
+  "_comment": "The fresh-distro matrix scripts/run-recipes.py runs every recipe on. `families`: the recipe families tested on the image (its own, plus `unknown` for the run-time-detecting lines and `any` for init-system lines). Keep the image list in step with .github/workflows/test-recipes.yml.",
+  "images": [
+    {"image": "debian:12", "families": ["apt", "unknown", "any"]},
+    {"image": "ubuntu:22.04", "families": ["apt", "unknown", "any"]},
+    {"image": "ubuntu:24.04", "families": ["apt", "unknown", "any"]},
+    {"image": "fedora:latest", "families": ["dnf", "unknown", "any"]},
+    {"image": "rockylinux/rockylinux:9", "families": ["dnf", "unknown", "any"]},
+    {"image": "alpine:3.20", "families": ["apk", "unknown", "any"]}
+  ]
+}
