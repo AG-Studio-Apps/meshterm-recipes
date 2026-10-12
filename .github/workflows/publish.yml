@@ -15,7 +15,7 @@
 #             emergency  a committed recipes.json.minisig, made offline with the emergency key
 #                        (scripts/sign-emergency.sh), already verified here.
 #             sign       anything else: the sign job signs with the primary key.
-#   sign    environment `recipes-signing` (main only; required reviewer). Runs no repository script: checks the
+#   sign    environment `recipes-signing` (main only; a required reviewer; self-review allowed). Runs no repository script: checks the
 #           environment still requires a reviewer, compares the artifact with the commit, signs, verifies, uploads.
 #   verify  no secrets, no repository script: the Pages artifact holds this commit's recipes.json and a signature that
 #           verifies against the pinned keys with the comment the mode calls for.
@@ -211,8 +211,9 @@ jobs:
       SERIAL: ${{ needs.build.outputs.serial }}
       DATE: ${{ needs.build.outputs.date }}
     steps:
-      # Fails closed when the environment no longer gates this job: with no required reviewer it would sign
-      # whatever reached main unattended.
+      # Fails closed when the environment no longer gates this job: a required reviewer, deployments limited to main,
+      # and no administrator bypass (the same three checks as the template catalogue's sign job). Self-review is
+      # deliberately allowed: James is the only reviewer and approves his own runs, as for the catalogue.
       - name: Check the environment still requires a reviewer
         env:
           GH_TOKEN: ${{ github.token }}
@@ -243,8 +244,6 @@ jobs:
               print(f"::error::Refusing to sign: the recipes-signing environment {problem}. Fix it in Settings > Environments, then re-run.")
           if problems:
               sys.exit(1)
-          if not any(rule.get("prevent_self_review") for rule in rules):
-              print("::warning::recipes-signing does not prevent self-review.")
           print(f"recipes-signing: {len(reviewers)} required reviewer(s), administrators cannot bypass, main only.")
           PY
 

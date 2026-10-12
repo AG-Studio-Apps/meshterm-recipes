@@ -97,7 +97,7 @@ unknown placeholder. A schema bump stops every older app from updating, so keep 
 ## Signing
 
 `publish.yml` is the catalogue's pipeline (meshdeck-docs) for this file: the primary key lives only in the
-`recipes-signing` environment (required reviewer, self-review prevented, no admin bypass, `main` only: the sign job
+`recipes-signing` environment (a required reviewer, who may approve their own run; no admin bypass; `main` only: the sign job
 refuses to run otherwise); the trusted comment is `recipes=host-recipes version=<serial> date=<date> commit=<sha>`.
 A push that changes nothing in `recipes.json` reuses the live signature without approval.
 
@@ -106,8 +106,9 @@ which validates, checks the serial is above the live one and verifies the result
 `recipes.json.minisig` together, push and approve. Delete `recipes.json.minisig` in the next change. Key rotation
 moves together across this repository's `keys/` and workflow ids, meshdeck-docs, and the app's `CatalogTrust`.
 
-First-time setup (once): create this repository, Settings > Pages > Source: GitHub Actions, then
-`scripts/setup-recipes-signing.sh <the catalogue primary recovery folder>` and the environment's reviewer settings.
+Setup is done for this repository (Pages from GitHub Actions; `recipes-signing` with its reviewer, main only, and
+the `MINISIGN_KEY` / `MINISIGN_PASSWORD` secrets). `scripts/setup-recipes-signing.sh` is for re-creating it on a
+FRESH repository only.
 
 ## The app side
 
