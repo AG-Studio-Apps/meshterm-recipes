@@ -59,6 +59,44 @@ def _word_at(text, i, word, word_chars):
     return (before is None or before not in word_chars) and (after is None or after not in word_chars)
 
 
+# Commands that change privilege. Matched as whole words; `/` and quotes are boundaries, so `/usr/bin/sudo` and
+# `"su"` count, while `sudoers.d`, `--user` and `pseudo` do not.
+PRIVILEGE_WORDS = ("sudo", "su", "doas", "pkexec", "run0")
+WORD_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
+USER_ENDS = set(" ;&|)")
+
+
+def contains_word(text, word):
+    start = text.find(word)
+    while start >= 0:
+        before = text[start - 1] if start > 0 else None
+        after = text[start + len(word)] if start + len(word) < len(text) else None
+        if (before is None or before not in WORD_CHARS) and (after is None or after not in WORD_CHARS):
+            return True
+        start = text.find(word, start + 1)
+    return False
+
+
+def check_user_placement(run):
+    """`{{user}}` only as a standalone word outside quotes (the app substitutes one already-quoted word)."""
+    quote = None
+    i = 0
+    while i < len(run):
+        if run.startswith("{{user}}", i):
+            before = run[i - 1] if i > 0 else None
+            after = run[i + 8] if i + 8 < len(run) else None
+            if quote is not None or (before is not None and before != " ") or (after is not None and after not in USER_ENDS):
+                raise RecipeError("{{user}} must be a word of its own, outside quotes")
+            i += 8
+            continue
+        c = run[i]
+        if quote is None and c in "'\"":
+            quote = c
+        elif quote is not None and c == quote:
+            quote = None
+        i += 1
+
+
 def check_template(run):
     """Raise RecipeError unless `run` is a valid command template. Returns the placeholder names used."""
     if not isinstance(run, str) or not run or len(run) > MAX_RUN:
@@ -91,16 +129,13 @@ def check_template(run):
         raise RecipeError("stray }}")
     if names.count("packages") > 1:
         raise RecipeError("{{packages}} twice")
-    word_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./")
-    for i in range(len(plain) - 3):
-        if plain[i:i + 4] == "sudo" and _word_at(plain, i, "sudo", word_chars):
-            raise RecipeError("a literal sudo (use {{sudo}})")
-    for i in range(len(plain) - 1):
-        if plain[i:i + 2] == "su":
-            before = plain[i - 1] if i > 0 else None
-            after = plain[i + 2] if i + 2 < len(plain) else None
-            if (before is None or before in " ;&|(`{") and (after is None or after == " "):
-                raise RecipeError("a literal su (privilege is the app's)")
+    for word in PRIVILEGE_WORDS:
+        if contains_word(plain, word):
+            raise RecipeError(f"a literal {word} (privilege is the app's: use {{{{sudo}}}})")
+    for i, c in enumerate(run):
+        if c == "\\" and ((i > 0 and run[i - 1].isalpha()) or (i + 1 < len(run) and run[i + 1].isalpha())):
+            raise RecipeError("a backslash next to a letter (an escaped command word)")
+    check_user_placement(run)
     return names
 
 
