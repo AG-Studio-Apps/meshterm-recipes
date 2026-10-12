@@ -98,7 +98,7 @@
     ],
     "engine.docker.start-systemd": [
       {"families": ["any"], "run": "{{sudo}}groupadd -f -r docker; {{sudo}}systemctl reset-failed docker.socket docker.service 2>/dev/null; {{sudo}}systemctl enable --now docker",
-       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nenable --now docker')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
+       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { command -v groupadd >/dev/null || ! command -v dnf >/dev/null || dnf install -y -q shadow-utils >/dev/null; } && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nenable --now docker')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
     ],
     "engine.docker.start-openrc": [
       {"families": ["any"], "run": "{{sudo}}rc-service docker start && {{sudo}}rc-update add docker default",
@@ -271,11 +271,11 @@
     ],
     "engine.docker.start-service-systemd": [
       {"families": ["any"], "run": "{{sudo}}groupadd -f -r docker; {{sudo}}systemctl reset-failed docker.socket docker.service 2>/dev/null; {{sudo}}systemctl start docker",
-       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nstart docker')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
+       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { command -v groupadd >/dev/null || ! command -v dnf >/dev/null || dnf install -y -q shadow-utils >/dev/null; } && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nstart docker')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
     ],
     "engine.docker.start-socket-systemd": [
       {"families": ["any"], "run": "{{sudo}}groupadd -f -r docker; {{sudo}}systemctl reset-failed docker.socket docker.service 2>/dev/null; {{sudo}}systemctl start docker.socket",
-       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nstart docker.socket')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
+       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { command -v groupadd >/dev/null || ! command -v dnf >/dev/null || dnf install -y -q shadow-utils >/dev/null; } && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nstart docker.socket')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
     ],
     "engine.containerd.rootless-setup": [
       {"families": ["any"], "run": "containerd-rootless-setuptool.sh install",
