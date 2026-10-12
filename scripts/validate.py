@@ -27,7 +27,7 @@ import recipes_lib as lib  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CI_KEYS = {"check", "skip", "needs", "before", "packages", "xfail", "skipOn", "rootOnly", "userOnly", "port", "proto",
-           "group", "path", "user"}
+           "group", "path", "user", "su"}
 FORMAT_CASES = os.path.join(ROOT, "ci", "format-cases.json")
 
 
@@ -70,6 +70,8 @@ def check_ci(doc):
                 raise lib.RecipeError(f"{where}.group: sudo or wheel")
             if "user" in ci and (not isinstance(ci["user"], str) or lib.user_word(ci["user"]) != ci["user"]):
                 raise lib.RecipeError(f"{where}.user: a plain user name")
+            if "su" in ci and ci["su"] is not True:
+                raise lib.RecipeError(f"{where}.su: true (also run the su -c form on the suMode images)")
             if "path" in ci and not lib.is_path_value(ci["path"]):
                 raise lib.RecipeError(f"{where}.path: an absolute path")
             if "check" in ci:

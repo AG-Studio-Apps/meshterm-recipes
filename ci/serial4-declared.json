@@ -1,0 +1,247 @@
+{
+ "_comment": "Every app-visible change serial 4 makes against serial 3 (scripts/validate.py --declared ci/serial4-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 3>). Serial 3's own list stays in ci/serial3-declared.json (meshTerm's tests read a byte-identical copy of that one).",
+ "changes": [
+  {
+   "intent": "engine.docker.rootless-prepare",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "debian",
+     "ubuntu",
+     "raspbian",
+     "linuxmint",
+     "pop"
+    ]
+   },
+   "reason": "The AppArmor branch loads its profile with apparmor_parser -r (no systemd needed; serial 3 restarted apparmor.service, which fails without systemd) and runs only where apparmor_parser exists (no AppArmor userspace: nothing to load into, and a container on a restricting host has no /etc/apparmor.d: the serial-3 GitHub runner failure). A profile file of ours that exists but is not loaded (/sys/kernel/security/apparmor/policy/profiles/*/name, readable without root) is loaded (review 2026-10-12)."
+  },
+  {
+   "intent": "engine.docker.rootless-prepare",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "kali"
+    ]
+   },
+   "reason": "Kali keeps the Debian family's apt text: the same apparmor_parser change. A profile file of ours that exists but is not loaded (/sys/kernel/security/apparmor/policy/profiles/*/name, readable without root) is loaded (review 2026-10-12)."
+  },
+  {
+   "intent": "tmux.install",
+   "selector": {
+    "families": [
+     "pacman"
+    ]
+   },
+   "reason": "Arch: pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). (serial 3's -S alone failed 'target not found' on a fresh Arch with no sync database)"
+  },
+  {
+   "intent": "git.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ]
+   },
+   "reason": "The unknown-family chain gains zypper and pacman (Containers sends Arch and openSUSE as unknown) and fails with a message where no package manager it knows is found (serial 3 exited 0 having installed nothing). pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-102, 106 repository refresh failed, 107 scriptlet failed; 103, zypper updated itself and stopped, is not success) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
+  },
+  {
+   "intent": "ca-certificates.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ]
+   },
+   "reason": "The unknown-family chain gains zypper (ca-certificates with ca-certificates-mozilla, the bundle) and pacman, and fails with a message where no package manager it knows is found. pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-102, 106 repository refresh failed, 107 scriptlet failed; 103, zypper updated itself and stopped, is not success) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "arch"
+    ]
+   },
+   "reason": "Arch: get.docker.com refuses it ('Unsupported distribution'); Arch's docker package; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12). pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). Trying -S first trades a possible partial upgrade (a package built against newer libraries than the stale local database) for not upgrading the whole system on a one-tap fix; -Syu remains the fallback. A user without cached sudo credentials can be asked for the password twice when -S fails (low harm, left as is). The running kernel's package-owned /usr/lib/modules/<release>/vmlinuz (the directory where a kernel ships none) is recorded before the install; if the upgrade removed it, the group and the user's join are still done (a reboot applies both) and only the Docker start is skipped, with 'reboot the server, then tap Check Again' and a non-zero exit."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "cachyos",
+     "endeavouros",
+     "garuda",
+     "manjaro"
+    ]
+   },
+   "reason": "Manjaro, EndeavourOS, Garuda and CachyOS (Arch-based): the Arch text. pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). Trying -S first trades a possible partial upgrade (a package built against newer libraries than the stale local database) for not upgrading the whole system on a one-tap fix; -Syu remains the fallback. A user without cached sudo credentials can be asked for the password twice when -S fails (low harm, left as is). The running kernel's package-owned /usr/lib/modules/<release>/vmlinuz (the directory where a kernel ships none) is recorded before the install; if the upgrade removed it, the group and the user's join are still done (a reboot applies both) and only the Docker start is skipped, with 'reboot the server, then tap Check Again' and a non-zero exit."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "opensuse-leap",
+     "opensuse-slowroll",
+     "opensuse-tumbleweed"
+    ]
+   },
+   "reason": "openSUSE: get.docker.com refuses it; openSUSE's docker package; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12). zypper's informational exits (100-102, 106 repository refresh failed, 107 scriptlet failed; 103, zypper updated itself and stopped, is not success) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
+  },
+  {
+   "intent": "engine.docker.join-group",
+   "selector": {
+    "families": [
+     "apt",
+     "unknown"
+    ]
+   },
+   "reason": "Device finding 2026-10-12 (a Debian host whose docker group was deleted): usermod refused the join ('group docker does not exist', rc 6); the line creates the group first (groupadd -f -r: a no-op where it exists). The rootful one-step install-complete row &&-combines this line, so it gains the same. A no-sudo host's su -c keeps the user's PATH (on Debian no /usr/sbin or /sbin), so the line adds them before groupadd/usermod (review 2026-10-12)."
+  },
+  {
+   "intent": "engine.docker.start-systemd",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "Device finding 2026-10-12 (a Debian host whose docker group was deleted): docker.socket (SocketGroup=docker) failed, so 'systemctl enable --now docker' failed its dependency job; the line creates the group, clears the failed units (reset-failed), then enables and starts. A no-sudo host's su -c keeps the user's PATH (on Debian no /usr/sbin or /sbin), so the line adds them before groupadd/usermod (review 2026-10-12). The group step comes first and stops the line (one refusal for a non-sudoer); reset-failed runs only when systemctl is-failed says so, and never fails the line."
+  },
+  {
+   "intent": "engine.docker.start-service-systemd",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The same group and reset-failed steps before 'systemctl start docker'. A no-sudo host's su -c keeps the user's PATH (on Debian no /usr/sbin or /sbin), so the line adds them before groupadd/usermod (review 2026-10-12). The group step comes first and stops the line (one refusal for a non-sudoer); reset-failed runs only when systemctl is-failed says so, and never fails the line."
+  },
+  {
+   "intent": "engine.docker.start-socket-systemd",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The same group and reset-failed steps before 'systemctl start docker.socket'. A no-sudo host's su -c keeps the user's PATH (on Debian no /usr/sbin or /sbin), so the line adds them before groupadd/usermod (review 2026-10-12). The group step comes first and stops the line (one refusal for a non-sudoer); reset-failed runs only when systemctl is-failed says so, and never fails the line."
+  },
+  {
+   "intent": "engine.docker.install-alpine",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "Alpine: the docker group is created when missing, before the daemon starts (its socket's group) and before the user joins it"
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "amzn"
+    ],
+    "versions": {
+     "min": "2023"
+    }
+   },
+   "reason": "Amazon Linux 2023: dnf install docker; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12)."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "amzn"
+    ],
+    "versions": {
+     "below": "2023"
+    }
+   },
+   "reason": "Amazon Linux 2: amazon-linux-extras install docker; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12)."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "almalinux",
+     "centos",
+     "ol",
+     "rhel",
+     "rocky"
+    ]
+   },
+   "reason": "EL and Oracle Linux (Oracle reaches this as an unknown family): Docker CE from Docker's rhel repository; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12)."
+  },
+  {
+   "intent": "sudo.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ]
+   },
+   "reason": "Kept consistent with the other pacman and zypper lines: pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-102, 106 repository refresh failed, 107 scriptlet failed; 103, zypper updated itself and stopped, is not success) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
+  },
+  {
+   "intent": "engine.rootless.apparmor-userns",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "apparmor_parser -r loads the profile (serial 3 restarted apparmor.service, which needs systemd); a message and a non-zero exit where apparmor_parser is missing; a profile file of ours that exists but is not loaded is loaded; /usr/sbin and /sbin added to PATH (review 2026-10-12)."
+  },
+  {
+   "intent": "agent.claude.install-official",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The official installer is fetched with curl --compressed --retry 3 and must start with #! (up to 3 tries, 5 s apart), else 'The installer download was not a script (the vendor server returned something else): tap again in a minute.' and a non-zero exit, before it runs (the GitHub matrix and a local run got a non-script for agy: 'cannot execute binary file'). The loop runs in sh -c so the line stays valid when pasted into a fish login shell; still ~/.mt-install-<name>.sh, https, removed after."
+  },
+  {
+   "intent": "agent.codex.install-official",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The official installer is fetched with curl --compressed --retry 3 and must start with #! (up to 3 tries, 5 s apart), else 'The installer download was not a script (the vendor server returned something else): tap again in a minute.' and a non-zero exit, before it runs (the GitHub matrix and a local run got a non-script for agy: 'cannot execute binary file'). The loop runs in sh -c so the line stays valid when pasted into a fish login shell; still ~/.mt-install-<name>.sh, https, removed after."
+  },
+  {
+   "intent": "agent.agy.install-official",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The official installer is fetched with curl --compressed --retry 3 and must start with #! (up to 3 tries, 5 s apart), else 'The installer download was not a script (the vendor server returned something else): tap again in a minute.' and a non-zero exit, before it runs (the GitHub matrix and a local run got a non-script for agy: 'cannot execute binary file'). The loop runs in sh -c so the line stays valid when pasted into a fish login shell; still ~/.mt-install-<name>.sh, https, removed after."
+  },
+  {
+   "intent": "herdr.install",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The official installer is fetched with curl --compressed --retry 3 and must start with #! (up to 3 tries, 5 s apart), else 'The installer download was not a script (the vendor server returned something else): tap again in a minute.' and a non-zero exit, before it runs (the GitHub matrix and a local run got a non-script for agy: 'cannot execute binary file'). The loop runs in sh -c so the line stays valid when pasted into a fish login shell; still ~/.mt-install-<name>.sh, https, removed after."
+  }
+ ]
+}

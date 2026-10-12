@@ -8,6 +8,9 @@ renders it the way the app does, and runs it in a FRESH container (one at a time
   root   the bare form (no sudo), as root, on the untouched image (empty package lists and all).
   user   the sudo form, as a non-root user `mt` with passwordless sudo, on the image plus sudo (package lists
          emptied again after sudo is installed, so a recipe still has to refresh them itself).
+  su     the app's `su -c '...'` form for a host with no sudo (the root password): the bare form, run through
+         `su -c` from `mt`'s LOGIN shell, so it gets that user's PATH (on Debian no /usr/sbin or /sbin), as on a
+         real host. Only variants with `ci.su` on images marked `suMode` in ci/images.json.
 
 then runs the variant's `ci.check` as root (MT_USER names the user the recipe ran as). A variant's `ci` block says
 what to skip (`skip`, `skipOn`, `rootOnly`, `userOnly`), what to install first as root (`needs`, ids from the
@@ -37,6 +40,8 @@ import recipes_lib as lib  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TIMEOUT = 20 * 60
+# How much of a failing case's output (stdout and stderr, interleaved) the log and the summary show.
+TAIL_LINES = 30
 # The image's own package-manager family (for `needs` and the sudo set-up), from os-release ID / ID_LIKE.
 NATIVE = {"debian": "apt", "ubuntu": "apt", "fedora": "dnf", "rocky": "dnf", "rockylinux": "dnf", "rhel": "dnf", "almalinux": "dnf",
           "centos": "dnf", "alpine": "apk", "amzn": "dnf", "amazonlinux": "dnf", "arch": "pacman", "archlinux": "pacman",
@@ -118,7 +123,8 @@ def plan(doc, matrix, args):
                 elif family not in variant["families"]:
                     continue
                 ci = variant.get("ci", {})
-                for mode in ("root", "user"):
+                modes = ("root", "user") + (("su",) if entry.get("suMode") and ci.get("su") else ())
+                for mode in modes:
                     if args.mode and mode != args.mode:
                         continue
                     why = None
@@ -133,7 +139,7 @@ def plan(doc, matrix, args):
                     packages = packages_for(doc, variant, intent, native)
                     # `{{user}}` is the case's own user, as the app renders a known SSH user (not `$USER`, which a
                     # root `docker run` does not set); `ci.user` names another (root setting sudo up FOR a user).
-                    user = ci.get("user") or ("mt" if mode == "user" else "root")
+                    user = ci.get("user") or ("root" if mode == "root" else "mt")
                     command = lib.render(variant["run"], sudo=(mode == "user"), user=user,
                                          packages=packages, port=ci.get("port"), proto=ci.get("proto"),
                                          group=ci.get("group"), path=ci.get("path"))
@@ -144,6 +150,9 @@ def plan(doc, matrix, args):
 def run_case(doc, case):
     ci = case["variant"]["ci"]
     lines = ["set -e", "export DEBIAN_FRONTEND=noninteractive"]
+    if case["mode"] == "su":
+        # No sudoers entry: root's password (emptied here, so su asks for nothing) is the way to root.
+        lines += [SUDO_SETUP[case["native"]], "passwd -d root >/dev/null"]
     if case["mode"] == "user":
         lines += [SUDO_SETUP[case["native"]],
                   "echo 'mt ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/mt",
@@ -156,10 +165,13 @@ def run_case(doc, case):
         lines.append("{ " + prep + "; } >/dev/null 2>&1 || true")
     if ci.get("before"):
         lines.append(ci["before"] + " >/dev/null")
-    user = "mt" if case["mode"] == "user" else "root"
+    user = "root" if case["mode"] == "root" else "mt"
     lines.append(f"export MT_USER={user}")
     lines.append("echo '--- recipe'")
-    if case["mode"] == "user":
+    if case["mode"] == "su":
+        # `su - mt`: the user's login shell (its PATH from /etc/profile); then the app's `su -c`, which keeps it.
+        lines.append("set +e; su - mt -s /bin/sh -c 'su -c \"sh /t/recipe.sh\"' </dev/null; rc=$?; set -e")
+    elif case["mode"] == "user":
         lines.append("set +e; su mt -s /bin/sh -c 'cd && sh /t/recipe.sh' </dev/null; rc=$?; set -e")
     else:
         lines.append("set +e; (cd /root && sh /t/recipe.sh) </dev/null; rc=$?; set -e")
@@ -176,19 +188,27 @@ def run_case(doc, case):
             os.chmod(os.path.join(tmp, name), 0o644)
         started = time.time()
         try:
+            # stderr into stdout, so the tail reads in the order it was written (the error beside its step).
             result = subprocess.run(["docker", "run", "--rm", "-v", f"{tmp}:/t:ro", case["image"], "sh", "/t/case.sh"],
-                                    capture_output=True, text=True, timeout=TIMEOUT)
-            code, output = result.returncode, result.stdout + result.stderr
-        except subprocess.TimeoutExpired:
-            code, output = 124, "timed out"
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=TIMEOUT)
+            code, output = result.returncode, result.stdout.decode("utf-8", "replace")
+        except subprocess.TimeoutExpired as error:
+            partial = error.stdout or b""
+            code, output = 124, (partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial) + "\ntimed out"
         return code, output, time.time() - started
+
+
+def tail(output, lines=TAIL_LINES):
+    """The last `lines` lines of a case's output, indented under its result line (empty lines dropped)."""
+    kept = [line.rstrip() for line in output.splitlines() if line.strip()][-lines:]
+    return "\n".join("      | " + line for line in kept) if kept else "      | (no output)"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--image", action="append")
     parser.add_argument("--intent", action="append")
-    parser.add_argument("--mode", choices=("root", "user"))
+    parser.add_argument("--mode", choices=("root", "user", "su"))
     parser.add_argument("--list", action="store_true", help="print the cases, run nothing")
     parser.add_argument("--summary", help="append a Markdown table here (GITHUB_STEP_SUMMARY)")
     args = parser.parse_args()
@@ -197,7 +217,7 @@ def main():
     with open(os.path.join(ROOT, "ci", "images.json")) as handle:
         matrix = json.load(handle)
 
-    rows, failed = [], 0
+    rows, failed, failures = [], 0, []
     for case in plan(doc, matrix, args):
         label = f"{case['image']:<14} {case['mode']:<4} {case['family']:<7} {case['intent']}"
         if case["skip"]:
@@ -222,9 +242,14 @@ def main():
             status, note = ("XFAIL", xfail) if xfail else ("FAIL", why)
             if status == "FAIL":
                 failed += 1
-                print(output[-3000:])
         rows.append((case, status, note))
         print(f"{status:<5} {label} ({seconds:.0f} s){': ' + note if note else ''}", flush=True)
+        if status == "FAIL":
+            # The diagnosis: what the recipe (or its check) printed last, right under the FAIL line.
+            print(f"      last {TAIL_LINES} lines of output:\n{tail(output)}", flush=True)
+            failures.append((label, note, tail(output)))
+            if os.environ.get("GITHUB_ACTIONS") == "true":
+                print(f"::error title=recipe FAIL::{label.split()[0]} {case['mode']} {case['intent']}: {note}")
 
     if args.summary and not args.list:
         with open(args.summary, "a") as handle:
@@ -232,6 +257,8 @@ def main():
             for case, status, note in rows:
                 handle.write(f"| {case['image']} | {case['mode']} | {case['family']} | `{case['intent']}` | "
                              f"{status} | {str(note).replace('|', '/')} |\n")
+            for label, note, text in failures:
+                handle.write(f"\n<details><summary>FAIL {label}: {note}</summary>\n\n```\n{text}\n```\n</details>\n")
     counts = {s: sum(1 for _, st, _ in rows if st == s) for s in ("PASS", "FAIL", "XFAIL", "XPASS", "SKIP")}
     print("summary: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
     return 1 if failed else 0

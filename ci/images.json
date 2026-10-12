@@ -1,5 +1,5 @@
 {
-  "_comment": "The fresh-distro matrix scripts/run-recipes.py runs every recipe on. `families`: the recipe families tested on the image (its own, plus `unknown` for the run-time-detecting lines and `any` for init-system lines). Keep the image list in step with .github/workflows/test-recipes.yml.",
+  "_comment": "The fresh-distro matrix scripts/run-recipes.py runs every recipe on. `families`: the recipe families tested on the image (its own, plus `unknown` for the run-time-detecting lines and `any` for init-system lines). Keep the image list in step with .github/workflows/test-recipes.yml. `suMode`: also run the variants marked `ci.su` in the su -c form (the app's form for a host with no sudo), from the user's login shell.",
   "images": [
     {
       "image": "debian:12",
@@ -7,7 +7,8 @@
         "apt",
         "unknown",
         "any"
-      ]
+      ],
+      "suMode": true
     },
     {
       "image": "debian:13",

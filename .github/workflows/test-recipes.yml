@@ -34,6 +34,19 @@ jobs:
           set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" = pull_request ]; then
             python3 scripts/validate.py --previous-ref "origin/${GITHUB_BASE_REF}"
+            # A pull request that raises the serial lists every app-visible change it makes in
+            # ci/serial<N>-declared.json (scripts/validate.py --declared); one that keeps the serial changes no data.
+            serial() { python3 -c 'import json, sys; print(json.load(sys.stdin)["serial"])'; }
+            new=$(serial < recipes.json)
+            old=$(git show "origin/${GITHUB_BASE_REF}:recipes.json" | serial)
+            if [ "$new" != "$old" ]; then
+              if [ ! -f "ci/serial${new}-declared.json" ]; then
+                echo "::error::serial ${old} -> ${new}: list the changes in ci/serial${new}-declared.json"
+                exit 1
+              fi
+              python3 scripts/validate.py --declared "ci/serial${new}-declared.json" \
+                --baseline ci/serial3-baseline.json --previous-ref "origin/${GITHUB_BASE_REF}"
+            fi
           else
             python3 scripts/validate.py
           fi
@@ -50,6 +63,10 @@ jobs:
         image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04", "fedora:latest", "rockylinux/rockylinux:9", "alpine:3.20",
                 "amazonlinux:2023", "archlinux:latest", "opensuse/leap:15.6"]
         mode: [root, user]
+        # The app's su -c form (a host with no sudo), on the images ci/images.json marks suMode.
+        include:
+          - image: "debian:12"
+            mode: su
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
