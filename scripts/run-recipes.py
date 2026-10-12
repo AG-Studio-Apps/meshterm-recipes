@@ -8,6 +8,9 @@ renders it the way the app does, and runs it in a FRESH container (one at a time
   root   the bare form (no sudo), as root, on the untouched image (empty package lists and all).
   user   the sudo form, as a non-root user `mt` with passwordless sudo, on the image plus sudo (package lists
          emptied again after sudo is installed, so a recipe still has to refresh them itself).
+  su     the app's `su -c '...'` form for a host with no sudo (the root password): the bare form, run through
+         `su -c` from `mt`'s LOGIN shell, so it gets that user's PATH (on Debian no /usr/sbin or /sbin), as on a
+         real host. Only variants with `ci.su` on images marked `suMode` in ci/images.json.
 
 then runs the variant's `ci.check` as root (MT_USER names the user the recipe ran as). A variant's `ci` block says
 what to skip (`skip`, `skipOn`, `rootOnly`, `userOnly`), what to install first as root (`needs`, ids from the
@@ -120,7 +123,8 @@ def plan(doc, matrix, args):
                 elif family not in variant["families"]:
                     continue
                 ci = variant.get("ci", {})
-                for mode in ("root", "user"):
+                modes = ("root", "user") + (("su",) if entry.get("suMode") and ci.get("su") else ())
+                for mode in modes:
                     if args.mode and mode != args.mode:
                         continue
                     why = None
@@ -135,7 +139,7 @@ def plan(doc, matrix, args):
                     packages = packages_for(doc, variant, intent, native)
                     # `{{user}}` is the case's own user, as the app renders a known SSH user (not `$USER`, which a
                     # root `docker run` does not set); `ci.user` names another (root setting sudo up FOR a user).
-                    user = ci.get("user") or ("mt" if mode == "user" else "root")
+                    user = ci.get("user") or ("root" if mode == "root" else "mt")
                     command = lib.render(variant["run"], sudo=(mode == "user"), user=user,
                                          packages=packages, port=ci.get("port"), proto=ci.get("proto"),
                                          group=ci.get("group"), path=ci.get("path"))
@@ -146,6 +150,9 @@ def plan(doc, matrix, args):
 def run_case(doc, case):
     ci = case["variant"]["ci"]
     lines = ["set -e", "export DEBIAN_FRONTEND=noninteractive"]
+    if case["mode"] == "su":
+        # No sudoers entry: root's password (emptied here, so su asks for nothing) is the way to root.
+        lines += [SUDO_SETUP[case["native"]], "passwd -d root >/dev/null"]
     if case["mode"] == "user":
         lines += [SUDO_SETUP[case["native"]],
                   "echo 'mt ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/mt",
@@ -158,10 +165,13 @@ def run_case(doc, case):
         lines.append("{ " + prep + "; } >/dev/null 2>&1 || true")
     if ci.get("before"):
         lines.append(ci["before"] + " >/dev/null")
-    user = "mt" if case["mode"] == "user" else "root"
+    user = "root" if case["mode"] == "root" else "mt"
     lines.append(f"export MT_USER={user}")
     lines.append("echo '--- recipe'")
-    if case["mode"] == "user":
+    if case["mode"] == "su":
+        # `su - mt`: the user's login shell (its PATH from /etc/profile); then the app's `su -c`, which keeps it.
+        lines.append("set +e; su - mt -s /bin/sh -c 'su -c \"sh /t/recipe.sh\"' </dev/null; rc=$?; set -e")
+    elif case["mode"] == "user":
         lines.append("set +e; su mt -s /bin/sh -c 'cd && sh /t/recipe.sh' </dev/null; rc=$?; set -e")
     else:
         lines.append("set +e; (cd /root && sh /t/recipe.sh) </dev/null; rc=$?; set -e")
@@ -198,7 +208,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--image", action="append")
     parser.add_argument("--intent", action="append")
-    parser.add_argument("--mode", choices=("root", "user"))
+    parser.add_argument("--mode", choices=("root", "user", "su"))
     parser.add_argument("--list", action="store_true", help="print the cases, run nothing")
     parser.add_argument("--summary", help="append a Markdown table here (GITHUB_STEP_SUMMARY)")
     args = parser.parse_args()
