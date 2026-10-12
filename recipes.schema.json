@@ -52,10 +52,12 @@
           }
         },
         "run": {"type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[ -~]+$",
-                "description": "One line, printable ASCII. Placeholders: {{sudo}} (opens a command), {{user}}, {{packages}}. No literal sudo or su."},
+                "description": "One line, printable ASCII. Placeholders: {{sudo}} (opens a command), {{user}}, {{packages}}, {{port}}, {{proto}}, {{group}} (only after -aG , -G  or addgroup {{user}} ), {{path}}. No literal sudo or su. A well-formed placeholder name this format does not know makes the variant unusable for today's apps (they use their bundled line), not the file invalid."},
         "admin": {"type": "boolean", "description": "Needs an administrator even without {{sudo}}. Default: whether it has {{sudo}}."},
+        "minSchema": {"type": "integer", "minimum": 1, "description": "The lowest format schema that can use this variant. An app reading an older schema treats the variant as unusable (its bundled line serves that intent and OS) instead of refusing the file."},
         "ci": {"type": "object", "description": "For scripts/run-recipes.py only; the app ignores it."}
-      }
+      },
+      "description": "Any other key marks a variant for a later app: today's apps keep the file and treat that variant as unusable (their bundled line serves that intent and OS when it would have been chosen)."
     }
   }
 }

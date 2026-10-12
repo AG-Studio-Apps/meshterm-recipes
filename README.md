@@ -57,7 +57,19 @@ foreground, at most every 12 hours (1 hour after a failure).
 - **run**: one line of printable ASCII, at most 2,000 characters. Placeholders, and only these:
   - `{{sudo}}` opens a command (at the start, or after `&& `, `; `, `then `, `| `): `sudo ` or nothing;
   - `{{user}}` the SSH user, as one safe shell word (`$USER` when the app names no one);
-  - `{{packages}}` the package names (for `packages.install` and `podman.rootless-prerequisites`).
+  - `{{packages}}` the package names (for `packages.install`, `podman.rootless-prerequisites` and `sudo.install`; in
+    `sudo.install` only right after an install verb or as `p="{{packages}}"`);
+  - `{{port}}` (1-65535) and `{{proto}}` (`tcp` / `udp`) for firewall lines;
+  - `{{group}}` the admin group (`sudo` / `wheel`), only right after `-aG ` / `-G ` or as `addgroup {{user}} {{group}}`
+    (the word `sudo` itself is refused anywhere in a run);
+  - `{{path}}` an absolute path of `[A-Za-z0-9._/+-]` (no `//`, no `/.`), such as rootlesskit's.
+
+  The app fills them in ONE pass, so a value is never read as a placeholder.
+- **Forward compatibility**: a variant with a key this format does not know (a later selector), a well-formed
+  placeholder it does not know, or `minSchema` above 1 is UNUSABLE for today's apps, not a refused file: where such a
+  variant would be chosen (it scores at least as high as the best usable one), the app uses its bundled line for that
+  intent and OS. Every security rule (privilege words, ASCII, placement of the known placeholders, selectors) still
+  refuses the whole file.
 - **admin** (optional): needs an administrator even without `{{sudo}}` (Docker's install script, which asks for
   sudo itself).
 - **packages**: package id -> family -> name, for `packages.install`. A family with no entry needs nothing.
@@ -65,7 +77,12 @@ foreground, at most every 12 hours (1 hour after a failure).
   `$MT_USER` is the user it ran as) or `skip` (why it cannot run in a container), and optionally `needs` (package ids
   installed first, as root), `before` (a shell line run first, as root), `packages` (the `{{packages}}` value),
   `rootOnly` / `userOnly` (why one pass is skipped), `skipOn` and `xfail` (image -> reason; an xfail is reported, never
-  red, and an XPASS asks for the entry to go).
+  red, and an XPASS asks for the entry to go), and `port`, `proto`, `group`, `path` (the values to render with).
+  `{{user}}` renders as the case's own user (`mt` in the sudo-user pass, `root` in the root pass).
+- **Agent and herdr lines** (`agent.*`, `herdr.install`; `scripts/validate.py`): no `{{sudo}}` or `admin`, https URLs
+  only, never `/tmp` or a download piped into a shell; an official installer is downloaded with
+  `-o ~/.mt-install-<name>.sh`, run, and the line ends `&& rm -f ~/.mt-install-<name>.sh`; Codex's keeps
+  `CODEX_NON_INTERACTIVE=1`.
 
 ## How to update a recipe safely
 

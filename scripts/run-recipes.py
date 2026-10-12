@@ -39,7 +39,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TIMEOUT = 20 * 60
 # The image's own package-manager family (for `needs` and the sudo set-up), from os-release ID / ID_LIKE.
 NATIVE = {"debian": "apt", "ubuntu": "apt", "fedora": "dnf", "rocky": "dnf", "rockylinux": "dnf", "rhel": "dnf", "almalinux": "dnf",
-          "centos": "dnf", "alpine": "apk", "amzn": "dnf", "amazonlinux": "dnf"}
+          "centos": "dnf", "alpine": "apk", "amzn": "dnf", "amazonlinux": "dnf", "arch": "pacman", "archlinux": "pacman",
+          "opensuse-leap": "zypper", "opensuse": "zypper", "leap": "zypper", "opensuse-tumbleweed": "zypper"}
 SUDO_SETUP = {
     "apt": "apt-get update -qq && apt-get install -y -qq sudo >/dev/null && rm -rf /var/lib/apt/lists/* "
            "&& useradd -m -s /bin/sh mt",
@@ -47,6 +48,10 @@ SUDO_SETUP = {
     "dnf": "{ { command -v sudo && command -v su; } >/dev/null || dnf install -y -q sudo util-linux >/dev/null; } "
            "&& useradd -m -s /bin/sh mt",
     "apk": "apk add -q sudo && adduser -D -s /bin/sh mt",
+    # Arch's image has no sync database: sudo needs one, then it is removed again so a recipe still has to sync.
+    "pacman": "pacman -Sy --noconfirm --needed sudo >/dev/null && rm -f /var/lib/pacman/sync/*.db "
+              "&& useradd -m -s /bin/sh mt",
+    "zypper": "{ command -v sudo >/dev/null || zypper -n -q install sudo >/dev/null; } && useradd -m -s /bin/sh mt",
 }
 
 
@@ -126,7 +131,11 @@ def plan(doc, matrix, args):
                     elif mode == "root" and "userOnly" in ci:
                         why = ci["userOnly"]
                     packages = packages_for(doc, variant, intent, native)
-                    command = lib.render(variant["run"], sudo=(mode == "user"), packages=packages)
+                    # `{{user}}` is the case's own user, as the app renders a known SSH user (not `$USER`, which a
+                    # root `docker run` does not set).
+                    command = lib.render(variant["run"], sudo=(mode == "user"), user="mt" if mode == "user" else "root",
+                                         packages=packages, port=ci.get("port"), proto=ci.get("proto"),
+                                         group=ci.get("group"), path=ci.get("path"))
                     yield dict(image=image, mode=mode, family=family, intent=intent, variant=variant, native=native,
                                command=command, skip=why)
 

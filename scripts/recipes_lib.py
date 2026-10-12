@@ -11,7 +11,19 @@ KIND = "host-recipes"
 SCHEMA = 1
 MAX_BYTES = 256 * 1024
 MAX_RUN = 2000
-PLACEHOLDERS = {"sudo", "user", "packages"}
+PLACEHOLDERS = {"sudo", "user", "packages", "port", "proto", "group", "path"}
+# A placeholder name a LATER app may know: a variant using one is unusable here (the app falls back to its bundled
+# copy for that intent and OS), never a refused file. Anything else between {{ }} refuses the file.
+FUTURE_PLACEHOLDER = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
+# The variant keys this format knows. A variant with another key (a later selector) is unusable here.
+VARIANT_KEYS = {"families", "ids", "versions", "run", "admin", "ci", "minSchema"}
+# `{{group}}` (the admin group, `sudo` or `wheel`): only as usermod's group or addgroup's second word.
+GROUP_OPENERS = ("-aG ", "-G ", "addgroup {{user}} ")
+# `{{packages}}` in sudo.install: only right after an install verb, or as a shell variable's value.
+SUDO_INSTALL_PACKAGE_OPENERS = ("install -y ", "add ", "-S --noconfirm ", 'p="')
+PROTOS = ("tcp", "udp")
+GROUPS = ("sudo", "wheel")
+PATH_VALUE = re.compile(r"^/[A-Za-z0-9._/+-]{1,255}$")
 # The families the app knows. A variant may name others (ignored by today's apps); see README.
 FAMILIES = {"apt", "dnf", "yum", "apk", "pacman", "zypper", "macos", "unknown", "any"}
 
@@ -97,13 +109,15 @@ def check_user_placement(run):
         i += 1
 
 
-def check_template(run):
-    """Raise RecipeError unless `run` is a valid command template. Returns the placeholder names used."""
+def parse_template(run, intent=None):
+    """Raise RecipeError unless `run` is a valid command template. Returns (the known placeholder names used, the
+    unknown but well-formed ones). An unknown name makes the variant UNUSABLE here (a later app's placeholder); every
+    other rule refuses the file, also in a variant that is unusable."""
     if not isinstance(run, str) or not run or len(run) > MAX_RUN:
         raise RecipeError("empty or too long")
     if any(not (0x20 <= ord(c) <= 0x7E) for c in run):
         raise RecipeError("not printable ASCII on one line")
-    names, plain, rest, offset = [], "", run, 0
+    names, unknown, plain, rest, offset = [], [], "", run, 0
     while "{{" in rest:
         start = rest.index("{{")
         plain += rest[:start]
@@ -111,16 +125,25 @@ def check_template(run):
         if end < 0:
             raise RecipeError("unclosed {{")
         name = rest[start + 2:end]
+        before = run[:offset + start]
         if name not in PLACEHOLDERS:
-            raise RecipeError(f"unknown placeholder {{{{{name}}}}}")
-        if name == "sudo":
-            before = run[:offset + start]
+            if not FUTURE_PLACEHOLDER.match(name):
+                raise RecipeError(f"unknown placeholder {{{{{name}}}}}")
+            unknown.append(name)
+        elif name == "sudo":
             if before and not before.endswith(SUDO_OPENERS):
                 raise RecipeError("{{sudo}} must open a command")
             after = rest[end + 2:]
             if not after or after[0] == " ":
                 raise RecipeError("{{sudo}} needs a command after it")
-        names.append(name)
+        elif name == "group":
+            if not before.endswith(GROUP_OPENERS):
+                raise RecipeError("{{group}} only right after -aG , -G  or addgroup {{user}} ")
+        elif name == "packages" and intent == "sudo.install":
+            if not before.endswith(SUDO_INSTALL_PACKAGE_OPENERS):
+                raise RecipeError("{{packages}} in sudo.install only right after an install verb or as p=\"...\"")
+        if name in PLACEHOLDERS:
+            names.append(name)
         plain += " "
         offset += end + 2
         rest = rest[end + 2:]
@@ -136,25 +159,69 @@ def check_template(run):
         if c == "\\" and ((i > 0 and run[i - 1].isalpha()) or (i + 1 < len(run) and run[i + 1].isalpha())):
             raise RecipeError("a backslash next to a letter (an escaped command word)")
     check_user_placement(run)
+    return names, unknown
+
+
+def check_template(run, intent=None):
+    """Raise RecipeError unless `run` is a valid template every rule of this format accepts, with known placeholders
+    only. Returns the placeholder names used."""
+    names, unknown = parse_template(run, intent)
+    if unknown:
+        raise RecipeError(f"unknown placeholder {{{{{unknown[0]}}}}}")
     return names
 
 
-def render(run, sudo, user=None, packages=None):
-    """The app's rendering (HostRecipeTemplate.render). None when a placeholder's value is refused."""
-    out = run.replace("{{sudo}}", "sudo " if sudo else "")
-    if "{{user}}" in out:
-        if user is None:
-            word = "$USER"
-        else:
-            if not user or user[0] == "-" or len(user) > 64 or any(ord(c) < 0x20 or ord(c) == 0x7F for c in user):
-                return None
-            word = user if re.match(r"^[A-Za-z0-9._-]+$", user) else "'" + user.replace("'", "'\\''") + "'"
-        out = out.replace("{{user}}", word)
-    if "{{packages}}" in out:
-        if not packages or not all(PACKAGE.match(p) for p in packages):
+def is_path_value(path):
+    return isinstance(path, str) and bool(PATH_VALUE.match(path)) and "//" not in path and "/." not in path
+
+
+def user_word(user):
+    """The SSH user as one shell word (plain, or POSIX single-quoted); None when no quoting makes it safe."""
+    if not user or user[0] == "-" or len(user) > 64 or any(ord(c) < 0x20 or ord(c) == 0x7F for c in user):
+        return None
+    return user if re.match(r"^[A-Za-z0-9._-]+$", user) else "'" + user.replace("'", "'\\''") + "'"
+
+
+def render(run, sudo, user=None, packages=None, port=None, proto=None, group=None, path=None):
+    """The app's rendering (HostRecipeTemplate.render): ONE pass over the template, so a value is never read as a
+    placeholder. None when a used placeholder has no value, or a refused one (`{{user}}` alone defaults to $USER)."""
+    values = {"sudo": "sudo " if sudo else ""}
+    if user is None:
+        values["user"] = "$USER"
+    elif user_word(user) is not None:
+        values["user"] = user_word(user)
+    if packages and all(isinstance(p, str) and PACKAGE.match(p) for p in packages):
+        values["packages"] = " ".join(packages)
+    if is_int(port) and 1 <= port <= 65535:
+        values["port"] = str(port)
+    if proto in PROTOS:
+        values["proto"] = proto
+    if group in GROUPS:
+        values["group"] = group
+    if is_path_value(path):
+        values["path"] = path
+    out, rest = "", run
+    while "{{" in rest:
+        start = rest.index("{{")
+        end = rest.index("}}", start + 2)
+        name = rest[start + 2:end]
+        if name not in values:
             return None
-        out = out.replace("{{packages}}", " ".join(packages))
-    return out
+        out += rest[:start] + values[name]
+        rest = rest[end + 2:]
+    return out + rest
+
+
+UNUSABLE = "_unusable"
+
+
+def is_usable(doc, intent, index):
+    return (intent, index) not in doc.get(UNUSABLE, ())
+
+
+def unusable_variants(doc):
+    """(intent, index) of every variant this format version cannot use (a later key, placeholder or minSchema)."""
+    return sorted(doc.get(UNUSABLE, ()))
 
 
 def load(data):
@@ -185,6 +252,7 @@ def load(data):
             if not TOKEN.match(family) or not isinstance(name, str) or not PACKAGE.match(name):
                 raise RecipeError(f"package {pid} on {family!r}: {name!r}")
     intents = doc.get("intents")
+    unusable = set()
     if not isinstance(intents, dict) or not intents:
         raise RecipeError("intents must be a non-empty object")
     for intent, variants in intents.items():
@@ -197,6 +265,7 @@ def load(data):
             where = f"{intent}[{index}]"
             if not isinstance(variant, dict):
                 raise RecipeError(f"{where}: not an object")
+            usable = not (set(variant) - VARIANT_KEYS)
             families = variant.get("families")
             if not isinstance(families, list) or not families or len(set(families)) != len(families) \
                     or not all(isinstance(f, str) and TOKEN.match(f) for f in families):
@@ -217,17 +286,27 @@ def load(data):
                 if low and high and compare_versions(parse_version(low), parse_version(high)) >= 0:
                     raise RecipeError(f"{where}.versions is empty")
             try:
-                check_template(variant.get("run"))
+                _, unknown = parse_template(variant.get("run"), intent)
             except RecipeError as error:
                 raise RecipeError(f"{where}.run: {error}") from None
+            if unknown:
+                usable = False
             if "admin" in variant and not isinstance(variant["admin"], bool):
                 raise RecipeError(f"{where}.admin must be true or false")
             if "ci" in variant and not isinstance(variant["ci"], dict):
                 raise RecipeError(f"{where}.ci must be an object")
+            if "minSchema" in variant:
+                if not is_int(variant["minSchema"]) or variant["minSchema"] < 1:
+                    raise RecipeError(f"{where}.minSchema must be an integer >= 1")
+                if variant["minSchema"] > SCHEMA:
+                    usable = False
             selector = (tuple(sorted(families)), tuple(sorted(ids or [])), low or "", high or "")
             if selector in selectors:
                 raise RecipeError(f"{where} repeats a selector")
             selectors.add(selector)
+            if not usable:
+                unusable.add((intent, index))
+    doc[UNUSABLE] = unusable
     return doc
 
 
@@ -250,28 +329,43 @@ def check_covers(doc, previous):
             raise RecipeError(f"drops package {package}")
 
 
-def select(doc, intent, family, distro_id=None, version_id=None):
-    """The app's choice (HostRecipeDocument.variant): the most specific matching variant, file order on a tie."""
-    best, best_score = None, None
+def score(variant, family, distro_id=None, version=None):
+    """How specifically `variant` applies (higher wins), None when it does not (HostRecipeVariant.score)."""
+    exact = family in variant["families"]
+    if not exact and "any" not in variant["families"]:
+        return None
+    value = 1 if exact else 0
+    if "ids" in variant:
+        if not distro_id or distro_id.lower() not in variant["ids"]:
+            return None
+        value += 4
+    if "versions" in variant:
+        if version is None:
+            return None
+        low, high = variant["versions"].get("min"), variant["versions"].get("below")
+        if low and compare_versions(version, parse_version(low)) < 0:
+            return None
+        if high and compare_versions(version, parse_version(high)) >= 0:
+            return None
+        value += 2
+    return value
+
+
+def select(doc, intent, family, distro_id=None, version_id=None, bundled=None):
+    """The app's choice (HostRecipeDocument.variant): the most specific matching variant, file order on a tie. When an
+    UNUSABLE variant (a later app's) applies at least as specifically as the best usable one, the answer for this
+    intent and OS is the bundled document's (`bundled`; None without one), never a wider usable line."""
+    best, best_score, blocked = None, None, None
     version = parse_version(version_id) if version_id else None
-    for variant in doc["intents"].get(intent, []):
-        exact = family in variant["families"]
-        if not exact and "any" not in variant["families"]:
+    for index, variant in enumerate(doc["intents"].get(intent, [])):
+        value = score(variant, family, distro_id, version)
+        if value is None:
             continue
-        score = 1 if exact else 0
-        if "ids" in variant:
-            if not distro_id or distro_id.lower() not in variant["ids"]:
-                continue
-            score += 4
-        if "versions" in variant:
-            if version is None:
-                continue
-            low, high = variant["versions"].get("min"), variant["versions"].get("below")
-            if low and compare_versions(version, parse_version(low)) < 0:
-                continue
-            if high and compare_versions(version, parse_version(high)) >= 0:
-                continue
-            score += 2
-        if best_score is None or score > best_score:
-            best, best_score = variant, score
+        if not is_usable(doc, intent, index):
+            blocked = value if blocked is None else max(blocked, value)
+            continue
+        if best_score is None or value > best_score:
+            best, best_score = variant, value
+    if blocked is not None and (best_score is None or blocked >= best_score):
+        return select(bundled, intent, family, distro_id, version_id) if bundled is not None else None
     return best

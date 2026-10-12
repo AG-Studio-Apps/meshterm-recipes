@@ -10,6 +10,14 @@
       ]
     },
     {
+      "image": "debian:13",
+      "families": [
+        "apt",
+        "unknown",
+        "any"
+      ]
+    },
+    {
       "image": "ubuntu:22.04",
       "families": [
         "apt",
@@ -52,6 +60,22 @@
     {
       "image": "amazonlinux:2023",
       "families": [
+        "unknown",
+        "any"
+      ]
+    },
+    {
+      "image": "archlinux:latest",
+      "families": [
+        "pacman",
+        "unknown",
+        "any"
+      ]
+    },
+    {
+      "image": "opensuse/leap:15.6",
+      "families": [
+        "zypper",
         "unknown",
         "any"
       ]
