@@ -206,6 +206,42 @@
     ]
    },
    "reason": "apparmor_parser -r loads the profile (serial 3 restarted apparmor.service, which needs systemd); a message and a non-zero exit where apparmor_parser is missing; a profile file of ours that exists but is not loaded is loaded; /usr/sbin and /sbin added to PATH (review 2026-10-12)."
+  },
+  {
+   "intent": "agent.claude.install-official",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The official installer is fetched with curl --compressed --retry 3 and must start with #! (up to 3 tries, 5 s apart), else 'The installer download was not a script (the vendor server returned something else): tap again in a minute.' and a non-zero exit, before it runs (the GitHub matrix and a local run got a non-script for agy: 'cannot execute binary file'). The loop runs in sh -c so the line stays valid when pasted into a fish login shell; still ~/.mt-install-<name>.sh, https, removed after."
+  },
+  {
+   "intent": "agent.codex.install-official",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The official installer is fetched with curl --compressed --retry 3 and must start with #! (up to 3 tries, 5 s apart), else 'The installer download was not a script (the vendor server returned something else): tap again in a minute.' and a non-zero exit, before it runs (the GitHub matrix and a local run got a non-script for agy: 'cannot execute binary file'). The loop runs in sh -c so the line stays valid when pasted into a fish login shell; still ~/.mt-install-<name>.sh, https, removed after."
+  },
+  {
+   "intent": "agent.agy.install-official",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The official installer is fetched with curl --compressed --retry 3 and must start with #! (up to 3 tries, 5 s apart), else 'The installer download was not a script (the vendor server returned something else): tap again in a minute.' and a non-zero exit, before it runs (the GitHub matrix and a local run got a non-script for agy: 'cannot execute binary file'). The loop runs in sh -c so the line stays valid when pasted into a fish login shell; still ~/.mt-install-<name>.sh, https, removed after."
+  },
+  {
+   "intent": "herdr.install",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The official installer is fetched with curl --compressed --retry 3 and must start with #! (up to 3 tries, 5 s apart), else 'The installer download was not a script (the vendor server returned something else): tap again in a minute.' and a non-zero exit, before it runs (the GitHub matrix and a local run got a non-script for agy: 'cannot execute binary file'). The loop runs in sh -c so the line stays valid when pasted into a fish login shell; still ~/.mt-install-<name>.sh, https, removed after."
   }
  ]
 }
