@@ -14,7 +14,7 @@ MAX_RUN = 2000
 PLACEHOLDERS = {"sudo", "user", "packages", "port", "proto", "group", "path"}
 # A placeholder name a LATER app may know: a variant using one is unusable here (the app falls back to its bundled
 # copy for that intent and OS), never a refused file. Anything else between {{ }} refuses the file.
-FUTURE_PLACEHOLDER = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
+FUTURE_PLACEHOLDER = re.compile(r"^[a-z][a-z0-9-]{0,31}\Z")
 # The variant keys this format knows. A variant with another key (a later selector) is unusable here.
 VARIANT_KEYS = {"families", "ids", "versions", "run", "admin", "ci", "minSchema"}
 # `{{group}}` (the admin group, `sudo` or `wheel`): only as usermod's group or addgroup's second word.
@@ -23,17 +23,17 @@ GROUP_OPENERS = ("-aG ", "-G ", "addgroup {{user}} ")
 SUDO_INSTALL_PACKAGE_OPENERS = ("install -y ", "add ", "-S --noconfirm ", 'p="')
 PROTOS = ("tcp", "udp")
 GROUPS = ("sudo", "wheel")
-PATH_VALUE = re.compile(r"^/[A-Za-z0-9._/+-]{1,255}$")
+PATH_VALUE = re.compile(r"^/[A-Za-z0-9._/+-]{1,255}\Z")
 # The families the app knows. A variant may name others (ignored by today's apps); see README.
 FAMILIES = {"apt", "dnf", "yum", "apk", "pacman", "zypper", "macos", "unknown", "any"}
 
-TOKEN = re.compile(r"^[a-z0-9-]{1,32}$")
-IDENTIFIER = re.compile(r"^[A-Za-z0-9]{1,32}$")
-DISTRO_ID = re.compile(r"^[a-z0-9._-]{1,64}$")
-PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}$")
-INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
-DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
-VERSION = re.compile(r"^[0-9]{1,9}(\.[0-9]{1,9}){0,5}$")
+TOKEN = re.compile(r"^[a-z0-9-]{1,32}\Z")
+IDENTIFIER = re.compile(r"^[A-Za-z0-9]{1,32}\Z")
+DISTRO_ID = re.compile(r"^[a-z0-9._-]{1,64}\Z")
+PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
+INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
+DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\Z")
+VERSION = re.compile(r"^[0-9]{1,9}(\.[0-9]{1,9}){0,5}\Z")
 SUDO_OPENERS = ("&& ", "; ", "then ", "| ")
 
 
