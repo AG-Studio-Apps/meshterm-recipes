@@ -94,6 +94,52 @@
     ]
    },
    "reason": "openSUSE: get.docker.com refuses it; openSUSE's docker package, enabled and started where systemd runs"
+  },
+  {
+   "intent": "engine.docker.join-group",
+   "selector": {
+    "families": [
+     "apt",
+     "unknown"
+    ]
+   },
+   "reason": "Device finding 2026-10-12 (a Debian host whose docker group was deleted): usermod refused the join ('group docker does not exist', rc 6); the line creates the group first (groupadd -f -r: a no-op where it exists). The rootful one-step install-complete row &&-combines this line, so it gains the same"
+  },
+  {
+   "intent": "engine.docker.start-systemd",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "Device finding 2026-10-12 (a Debian host whose docker group was deleted): docker.socket (SocketGroup=docker) failed, so 'systemctl enable --now docker' failed its dependency job; the line creates the group, clears the failed units (reset-failed), then enables and starts"
+  },
+  {
+   "intent": "engine.docker.start-service-systemd",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The same group and reset-failed steps before 'systemctl start docker'"
+  },
+  {
+   "intent": "engine.docker.start-socket-systemd",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "The same group and reset-failed steps before 'systemctl start docker.socket'"
+  },
+  {
+   "intent": "engine.docker.install-alpine",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "Alpine: the docker group is created when missing, before the daemon starts (its socket's group) and before the user joins it"
   }
  ]
 }

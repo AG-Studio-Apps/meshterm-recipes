@@ -74,12 +74,12 @@
        "ci": {"check": "command -v docker && command -v dockerd"}}
     ],
     "engine.docker.install-alpine": [
-      {"families": ["apk"], "run": "{{sudo}}apk add docker docker-cli-compose && {{sudo}}rc-update add docker default && {{sudo}}rc-service docker start && {{sudo}}addgroup {{user}} docker",
-       "ci": {"skip": "OpenRC is not running in a container: rc-service cannot start docker there"}}
+      {"families": ["apk"], "run": "{{sudo}}apk add docker docker-cli-compose && if ! grep -q '^docker:' /etc/group; then {{sudo}}addgroup -S docker; fi && {{sudo}}rc-update add docker default && {{sudo}}rc-service docker start && {{sudo}}addgroup {{user}} docker",
+       "ci": {"before": "printf '#!/bin/sh\\necho \"$0 $*\" >> /var/log/mt-openrc.log\\n' > /usr/local/bin/rc-service && cp /usr/local/bin/rc-service /usr/local/bin/rc-update && chmod +x /usr/local/bin/rc-service /usr/local/bin/rc-update && apk add -q docker && delgroup docker", "check": "command -v dockerd && grep -q '^docker:' /etc/group && id -nG \"$MT_USER\" | grep -qw docker && grep -qx '/usr/local/bin/rc-service docker start' /var/log/mt-openrc.log"}}
     ],
     "engine.docker.join-group": [
-      {"families": ["apt", "unknown"], "run": "{{sudo}}usermod -aG docker {{user}}",
-       "ci": {"before": "groupadd -f docker", "check": "id -nG \"$MT_USER\" | grep -qw docker", "userOnly": "root never joins the docker group (the app drops this step for root)",
+      {"families": ["apt", "unknown"], "run": "{{sudo}}groupadd -f -r docker && {{sudo}}usermod -aG docker {{user}}",
+       "ci": {"before": "! getent group docker >/dev/null || groupdel docker", "check": "getent group docker && id -nG \"$MT_USER\" | grep -qw docker", "userOnly": "root never joins the docker group (the app drops this step for root); the group is deleted first (a host whose docker group is gone: usermod refused it, rc 6)",
               "skipOn": {"alpine:3.20": "BusyBox has no usermod (the app offers this to apt and unknown hosts only)"}}}
     ],
     "engine.podman.install": [
@@ -97,8 +97,8 @@
        "ci": {"skip": "macOS: not in the Linux container matrix"}}
     ],
     "engine.docker.start-systemd": [
-      {"families": ["any"], "run": "{{sudo}}systemctl enable --now docker",
-       "ci": {"skip": "systemd is not running in a container"}}
+      {"families": ["any"], "run": "{{sudo}}groupadd -f -r docker; {{sudo}}systemctl reset-failed docker.socket docker.service 2>/dev/null; {{sudo}}systemctl enable --now docker",
+       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nenable --now docker')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
     ],
     "engine.docker.start-openrc": [
       {"families": ["any"], "run": "{{sudo}}rc-service docker start && {{sudo}}rc-update add docker default",
@@ -270,12 +270,12 @@
        "ci": {"before": "mkdir -p /etc/apparmor.d /usr/local/bin && printf '#!/bin/sh\\nexit 0\\n' > /usr/local/bin/systemctl && chmod +x /usr/local/bin/systemctl", "path": "/usr/bin/rootlesskit", "check": "printf 'abi <abi/4.0>,\\ninclude <tunables/global>\\n\"/usr/bin/rootlesskit\" flags=(unconfined) {\\n  userns,\\n}\\n' | cmp - /etc/apparmor.d/usr.bin.rootlesskit", "skipOn": {"debian:12": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "debian:13": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "ubuntu:22.04": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "fedora:latest": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "rockylinux/rockylinux:9": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "alpine:3.20": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "amazonlinux:2023": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "archlinux:latest": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "opensuse/leap:15.6": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)"}}}
     ],
     "engine.docker.start-service-systemd": [
-      {"families": ["any"], "run": "{{sudo}}systemctl start docker",
-       "ci": {"skip": "systemd is not running in a container"}}
+      {"families": ["any"], "run": "{{sudo}}groupadd -f -r docker; {{sudo}}systemctl reset-failed docker.socket docker.service 2>/dev/null; {{sudo}}systemctl start docker",
+       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nstart docker')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
     ],
     "engine.docker.start-socket-systemd": [
-      {"families": ["any"], "run": "{{sudo}}systemctl start docker.socket",
-       "ci": {"skip": "systemd is not running in a container"}}
+      {"families": ["any"], "run": "{{sudo}}groupadd -f -r docker; {{sudo}}systemctl reset-failed docker.socket docker.service 2>/dev/null; {{sudo}}systemctl start docker.socket",
+       "ci": {"before": "rm -f /usr/sbin/systemctl && printf '#!/bin/sh\\necho \"$*\" >> /var/log/mt-systemctl.log\\n' > /usr/sbin/systemctl && chmod +x /usr/sbin/systemctl && { ! getent group docker >/dev/null || groupdel docker; }", "check": "getent group docker && [ \"$(cat /var/log/mt-systemctl.log)\" = \"$(printf 'reset-failed docker.socket docker.service\\nstart docker.socket')\" ]", "skipOn": {"alpine:3.20": "BusyBox has no groupadd; Alpine is OpenRC (the app gives it engine.docker.start-openrc)"}}}
     ],
     "engine.containerd.rootless-setup": [
       {"families": ["any"], "run": "containerd-rootless-setuptool.sh install",
