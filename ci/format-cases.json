@@ -34,7 +34,9 @@
     {"run": "\\sudo x", "result": "refused"},
     {"run": "apk add {{packages}} {{packages}}", "result": "refused"},
     {"run": "visudo -cf /etc/sudoers.d/x.new && mv /etc/sudoers.d/x.new /etc/sudoers.d/x", "result": "ok"},
-    {"run": "{{sudo}}nft list chain inet filter input >/dev/null 2>&1 && {{sudo}}nft add rule inet filter input {{proto}} dport {{port}} accept || { echo \"No inet filter input chain here: use firewalld or ufw\"; false; }", "result": "ok"}
+    {"run": "{{sudo}}nft list chain inet filter input >/dev/null 2>&1 && {{sudo}}nft add rule inet filter input {{proto}} dport {{port}} accept || { echo \"No inet filter input chain here: use firewalld or ufw\"; false; }", "result": "ok"},
+    {"run": "loginctl --no-ask-password enable-linger {{user}} 2>/dev/null || {{sudo}}loginctl enable-linger {{user}}", "result": "ok", "why": "{{sudo}} may open the fallback after ||"},
+    {"run": "loginctl enable-linger {{user}} ||{{sudo}}loginctl enable-linger {{user}}", "result": "refused", "why": "{{sudo}} must open a command (|| then a space)"}
   ],
   "variants": [
     {"variant": {"families": ["apt"], "run": "a", "minSchema": 1}, "result": "ok"},
@@ -53,6 +55,8 @@
     {"run": "{{sudo}}usermod -aG {{group}} {{user}}", "values": {"sudo": false, "group": "sudo"}, "out": "usermod -aG sudo $USER"},
     {"run": "{{sudo}}usermod -aG {{group}} {{user}}", "values": {"sudo": true, "group": "admin"}, "out": null},
     {"run": "{{sudo}}usermod -aG {{group}} {{user}}", "values": {"sudo": true}, "out": null},
+    {"run": "loginctl --no-ask-password enable-linger {{user}} 2>/dev/null || {{sudo}}loginctl enable-linger {{user}}", "values": {"sudo": true, "user": "o'brien"}, "out": "loginctl --no-ask-password enable-linger 'o'\\''brien' 2>/dev/null || sudo loginctl enable-linger 'o'\\''brien'"},
+    {"run": "loginctl --no-ask-password enable-linger {{user}} 2>/dev/null || {{sudo}}loginctl enable-linger {{user}}", "values": {"sudo": false}, "out": "loginctl --no-ask-password enable-linger $USER 2>/dev/null || loginctl enable-linger $USER"},
     {"run": "{{sudo}}ufw allow {{port}}/{{proto}}", "values": {"sudo": true, "port": 49820, "proto": "udp"}, "out": "sudo ufw allow 49820/udp"},
     {"run": "{{sudo}}ufw allow {{port}}/{{proto}}", "values": {"sudo": true, "port": 0, "proto": "udp"}, "out": null},
     {"run": "{{sudo}}ufw allow {{port}}/{{proto}}", "values": {"sudo": true, "port": 65536, "proto": "udp"}, "out": null},

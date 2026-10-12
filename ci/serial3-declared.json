@@ -284,6 +284,15 @@
    "reason": "CONFIRMED 8: the same guard"
   },
   {
+   "intent": "engine.rootless.linger",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "A4/A10/Q5 (owner 2026-10-12): enable linger without sudo first (polkit may allow it over SSH), sudo only when that is refused, so a non-admin is not sent to an admin needlessly"
+  },
+  {
    "package": "sudo",
    "family": "pacman",
    "reason": "B1: the sudo package for every family"

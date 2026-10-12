@@ -256,8 +256,8 @@
        "ci": {"skip": "systemd is not running in a container"}}
     ],
     "engine.rootless.linger": [
-      {"families": ["any"], "run": "{{sudo}}loginctl enable-linger {{user}}",
-       "ci": {"skip": "systemd is not running in a container"}}
+      {"families": ["any"], "run": "loginctl --no-ask-password enable-linger {{user}} 2>/dev/null || {{sudo}}loginctl enable-linger {{user}}",
+       "ci": {"before": "printf '#!/bin/sh\\n[ \"$1\" = --no-ask-password ] && shift && [ \"$(id -u)\" != 0 ] && { echo \"Could not enable linger: Interactive authentication required.\" >&2; exit 1; }\\n[ \"$(id -u)\" = 0 ] && [ \"$1\" = enable-linger ] && mkdir -p /var/lib/systemd/linger && touch \"/var/lib/systemd/linger/$2\"\\n' > /usr/bin/loginctl && chmod +x /usr/bin/loginctl", "check": "test -f \"/var/lib/systemd/linger/$MT_USER\""}}
     ],
     "engine.rootless.apparmor-userns": [
       {"families": ["any"], "run": "f=$(echo {{path}} | sed -e 's@^/@@' -e 's@/@.@g') && { echo 'abi <abi/4.0>,'; echo 'include <tunables/global>'; echo '\"{{path}}\" flags=(unconfined) {'; echo '  userns,'; echo '}'; } | {{sudo}}tee \"/etc/apparmor.d/$f\" >/dev/null && {{sudo}}systemctl restart apparmor.service",
