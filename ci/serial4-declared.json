@@ -45,7 +45,7 @@
      "unknown"
     ]
    },
-   "reason": "The unknown-family chain gains zypper and pacman (Containers sends Arch and openSUSE as unknown) and fails with a message where no package manager it knows is found (serial 3 exited 0 having installed nothing). pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-103, 106 repository refresh failed, 107 scriptlet failed) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
+   "reason": "The unknown-family chain gains zypper and pacman (Containers sends Arch and openSUSE as unknown) and fails with a message where no package manager it knows is found (serial 3 exited 0 having installed nothing). pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-102, 106 repository refresh failed, 107 scriptlet failed; 103, zypper updated itself and stopped, is not success) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
   },
   {
    "intent": "ca-certificates.install",
@@ -54,7 +54,7 @@
      "unknown"
     ]
    },
-   "reason": "The unknown-family chain gains zypper (ca-certificates with ca-certificates-mozilla, the bundle) and pacman, and fails with a message where no package manager it knows is found. pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-103, 106 repository refresh failed, 107 scriptlet failed) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
+   "reason": "The unknown-family chain gains zypper (ca-certificates with ca-certificates-mozilla, the bundle) and pacman, and fails with a message where no package manager it knows is found. pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-102, 106 repository refresh failed, 107 scriptlet failed; 103, zypper updated itself and stopped, is not success) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
   },
   {
    "intent": "engine.docker.install-script",
@@ -66,7 +66,7 @@
      "arch"
     ]
    },
-   "reason": "Arch: get.docker.com refuses it ('Unsupported distribution'); Arch's docker package; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12). pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). A full upgrade that replaced the running kernel (its /usr/lib/modules directory gone) stops with 'reboot the server, then tap Check Again' before starting Docker."
+   "reason": "Arch: get.docker.com refuses it ('Unsupported distribution'); Arch's docker package; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12). pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). Trying -S first trades a possible partial upgrade (a package built against newer libraries than the stale local database) for not upgrading the whole system on a one-tap fix; -Syu remains the fallback. A user without cached sudo credentials can be asked for the password twice when -S fails (low harm, left as is). The running kernel's package-owned /usr/lib/modules/<release>/vmlinuz (the directory where a kernel ships none) is recorded before the install; if the upgrade removed it, the group and the user's join are still done (a reboot applies both) and only the Docker start is skipped, with 'reboot the server, then tap Check Again' and a non-zero exit."
   },
   {
    "intent": "engine.docker.install-script",
@@ -81,7 +81,7 @@
      "manjaro"
     ]
    },
-   "reason": "Manjaro, EndeavourOS, Garuda and CachyOS (Arch-based): the Arch text. pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). A full upgrade that replaced the running kernel (its /usr/lib/modules directory gone) stops with 'reboot the server, then tap Check Again' before starting Docker."
+   "reason": "Manjaro, EndeavourOS, Garuda and CachyOS (Arch-based): the Arch text. pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). Trying -S first trades a possible partial upgrade (a package built against newer libraries than the stale local database) for not upgrading the whole system on a one-tap fix; -Syu remains the fallback. A user without cached sudo credentials can be asked for the password twice when -S fails (low harm, left as is). The running kernel's package-owned /usr/lib/modules/<release>/vmlinuz (the directory where a kernel ships none) is recorded before the install; if the upgrade removed it, the group and the user's join are still done (a reboot applies both) and only the Docker start is skipped, with 'reboot the server, then tap Check Again' and a non-zero exit."
   },
   {
    "intent": "engine.docker.install-script",
@@ -95,7 +95,7 @@
      "opensuse-tumbleweed"
     ]
    },
-   "reason": "openSUSE: get.docker.com refuses it; openSUSE's docker package; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12). zypper's informational exits (100-103, 106 repository refresh failed, 107 scriptlet failed) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
+   "reason": "openSUSE: get.docker.com refuses it; openSUSE's docker package; ONE admin step (owner requirement: rootful Docker in one tap): install, the docker group (groupadd -f -r), reset-failed and enable --now where systemd runs, and the user's join unless the user is root (Containers offers these hosts install-script and join-group as separate rows, so the install line carries the join itself). A no-sudo host's su -c keeps the user's PATH, so the line adds them before groupadd/usermod (review 2026-10-12). zypper's informational exits (100-102, 106 repository refresh failed, 107 scriptlet failed; 103, zypper updated itself and stopped, is not success) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
   },
   {
    "intent": "engine.docker.join-group",
@@ -196,7 +196,7 @@
      "unknown"
     ]
    },
-   "reason": "Kept consistent with the other pacman and zypper lines: pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-103, 106 repository refresh failed, 107 scriptlet failed) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
+   "reason": "Kept consistent with the other pacman and zypper lines: pacman -S --needed first, -Syu only when that fails (a stale or missing sync database), so a one-tap fix rarely upgrades the whole system (review 2026-10-12). zypper's informational exits (100-102, 106 repository refresh failed, 107 scriptlet failed; 103, zypper updated itself and stopped, is not success) count as installed; 104 (not found) and the rest fail (review 2026-10-12)."
   },
   {
    "intent": "engine.rootless.apparmor-userns",
