@@ -6,8 +6,11 @@ The install, fix and start commands meshTerm shows for a server (install tmux, a
 curl and friends; start an engine; turn on Podman's socket), as signed DATA, so a command that a Linux distribution
 broke can be fixed without an App Store release.
 
-- `recipes.json`: the recipes. Published at `https://ag-studio-apps.github.io/meshterm-recipes/recipes.json` with its
-  minisign signature `recipes.json.minisig`.
+- `recipes.json`: the recipes (format schema 1). Published at
+  `https://ag-studio-apps.github.io/meshterm-recipes/v1/recipes.json` (what apps from 2.3 fetch) and, with the same
+  bytes and signature, at the root `recipes.json` (earlier TestFlight builds, kept while any is in use), each with its
+  minisign signature `recipes.json.minisig`. A future schema 2 would be `recipes-v2.json`, published to `v2/` and
+  signed on its own, so schema-1 apps keep getting serials beside it.
 - `recipes.schema.json`: the format, as documentation. `scripts/validate.py` is authoritative (it is the app's own
   rules, in Python).
 - `keys/`: the public keys the app pins. They are the template catalogue's keys (meshdeck-docs), reused under a

@@ -729,6 +729,14 @@
     "run": "{{sudo}}iptables -A INPUT -p {{proto}} --dport {{port}} -s 100.64.0.0/10 -j ACCEPT"
    }
   ],
+  "firewall.iptables.persist-openrc": [
+   {
+    "families": [
+     "any"
+    ],
+    "run": "{{sudo}}rc-service iptables save && {{sudo}}rc-update add iptables"
+   }
+  ],
   "agent.claude.install-official": [
    {
     "families": [

@@ -25,6 +25,11 @@
 # Pull requests run test-recipes.yml on their own; this workflow runs on main only. No pull_request_target, ever.
 # Every action is pinned by commit SHA.
 #
+# Per-schema path (meshTerm docs/recipes-v3-plan.md 2.1(c)): the site serves the same bytes and the same signature at
+# `v1/recipes.json` (what apps from 2.3 fetch) and at the root `recipes.json` (what earlier TestFlight builds fetch, kept
+# while any is in use). A future schema 2 publishes `recipes-v2.json` to `v2/`, signed on its own. A minisign
+# signature covers the body only, so one signature serves both paths; verify and smoke check both.
+#
 # Key rotation touches FOUR places that must move together: keys/recipes-<role>.pub here, the key ids below,
 # meshdeck-docs (the catalogue shares the keys), and the apps' pinned keys (meshTerm CatalogTrust).
 name: Publish recipes
@@ -42,6 +47,7 @@ concurrency:
 
 env:
   RECIPES_URL: https://ag-studio-apps.github.io/meshterm-recipes/recipes.json
+  RECIPES_V1_URL: https://ag-studio-apps.github.io/meshterm-recipes/v1/recipes.json
   PRIMARY_KEY_ID: 862A29760F5FC812
   EMERGENCY_KEY_ID: 61B6FABFCE0C67A9
 
@@ -157,13 +163,15 @@ jobs:
           echo "date=$date" >> "$GITHUB_OUTPUT"
           site="$RUNNER_TEMP/site"
           rm -rf "$site"
-          mkdir -p "$site/keys"
+          mkdir -p "$site/keys" "$site/v1"
           cp recipes.json recipes.schema.json "$site/"
+          cp recipes.json "$site/v1/recipes.json"
           cp keys/recipes-primary.pub keys/recipes-emergency.pub "$site/keys/"
           cp site/index.html "$site/index.html"
           touch "$site/.nojekyll"
           if python3 scripts/recipes_signature.py reuse --url "$RECIPES_URL" --body recipes.json \
                --out "$site/recipes.json.minisig"; then
+            cp "$site/recipes.json.minisig" "$site/v1/recipes.json.minisig"
             mode=reuse
             line="**Signature:** the live signature of serial $serial is reused (recipes.json did not change). No approval is needed."
           elif [ -f recipes.json.minisig ]; then
@@ -280,6 +288,7 @@ jobs:
           left=$(find "$site" ! -type f ! -type d | head -5)
           [ -z "$left" ] || { echo "::error::unexpected entries after unpacking: $left"; exit 1; }
           cmp "$site/recipes.json" recipes.json
+          cmp "$site/v1/recipes.json" recipes.json
           read -r body_serial body_date < <(python3 - <<'PY'
           import json, re
           def pairs(items):
@@ -351,7 +360,10 @@ jobs:
             pub=keys/recipes-primary.pub
             want="trusted comment: recipes=host-recipes version=$SERIAL date=$DATE commit=$GITHUB_SHA"
           fi
+          # One signature serves both paths (it covers the body only).
+          cp "$site/recipes.json.minisig" "$site/v1/recipes.json.minisig"
           minisign -V -q -p "$pub" -m "$site/recipes.json" -x "$site/recipes.json.minisig"
+          minisign -V -q -p "$pub" -m "$site/v1/recipes.json" -x "$site/v1/recipes.json.minisig"
           got=$(sed -n 3p "$site/recipes.json.minisig")
           [ "$got" = "$want" ] || { echo "::error::trusted comment is '$got', expected '$want'"; exit 1; }
           echo "Verified against $pub: ${got#trusted comment: }" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -414,6 +426,9 @@ jobs:
           tar -C "$site" --no-same-owner --no-same-permissions -xf "$tarball"
           cmp "$site/recipes.json" recipes.json
           test -f "$site/recipes.json.minisig" || { echo "::error::the Pages artifact has no recipes.json.minisig"; exit 1; }
+          # The per-schema path: the same body and the same signature.
+          cmp "$site/v1/recipes.json" recipes.json
+          cmp "$site/v1/recipes.json.minisig" "$site/recipes.json.minisig"
           read -r serial date < <(python3 -c 'import json; d = json.load(open("recipes.json")); print(d["serial"], d["date"])')
           case "$MODE" in
             sign)      roles="primary";           pattern="^recipes=host-recipes version=$serial date=$date commit=$GITHUB_SHA\$" ;;
@@ -480,5 +495,8 @@ jobs:
 
       # The CDN caches each file for up to 600 s; a lagging serial after ~10 minutes is a warning, a signature that
       # does not verify (or a live serial above this one) fails the job.
-      - name: Fetch and verify the live recipes.json and its signature
+      - name: Fetch and verify the live recipes.json and its signature (v1/, what apps from 2.3 read)
+        run: python3 scripts/recipes_signature.py smoke --url "$RECIPES_V1_URL" --expect-body recipes.json --tries 4 --interval 200
+
+      - name: Fetch and verify the live recipes.json and its signature (root, earlier TestFlight builds)
         run: python3 scripts/recipes_signature.py smoke --url "$RECIPES_URL" --expect-body recipes.json --tries 4 --interval 200
