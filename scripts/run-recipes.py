@@ -132,8 +132,9 @@ def plan(doc, matrix, args):
                         why = ci["userOnly"]
                     packages = packages_for(doc, variant, intent, native)
                     # `{{user}}` is the case's own user, as the app renders a known SSH user (not `$USER`, which a
-                    # root `docker run` does not set).
-                    command = lib.render(variant["run"], sudo=(mode == "user"), user="mt" if mode == "user" else "root",
+                    # root `docker run` does not set); `ci.user` names another (root setting sudo up FOR a user).
+                    user = ci.get("user") or ("mt" if mode == "user" else "root")
+                    command = lib.render(variant["run"], sudo=(mode == "user"), user=user,
                                          packages=packages, port=ci.get("port"), proto=ci.get("proto"),
                                          group=ci.get("group"), path=ci.get("path"))
                     yield dict(image=image, mode=mode, family=family, intent=intent, variant=variant, native=native,

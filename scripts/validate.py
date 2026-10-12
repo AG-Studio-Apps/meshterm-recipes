@@ -27,7 +27,7 @@ import recipes_lib as lib  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CI_KEYS = {"check", "skip", "needs", "before", "packages", "xfail", "skipOn", "rootOnly", "userOnly", "port", "proto",
-           "group", "path"}
+           "group", "path", "user"}
 FORMAT_CASES = os.path.join(ROOT, "ci", "format-cases.json")
 
 
@@ -68,6 +68,8 @@ def check_ci(doc):
                 raise lib.RecipeError(f"{where}.proto: tcp or udp")
             if "group" in ci and ci["group"] not in lib.GROUPS:
                 raise lib.RecipeError(f"{where}.group: sudo or wheel")
+            if "user" in ci and (not isinstance(ci["user"], str) or lib.user_word(ci["user"]) != ci["user"]):
+                raise lib.RecipeError(f"{where}.user: a plain user name")
             if "path" in ci and not lib.is_path_value(ci["path"]):
                 raise lib.RecipeError(f"{where}.path: an absolute path")
             if "check" in ci:
