@@ -37,6 +37,8 @@ import recipes_lib as lib  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TIMEOUT = 20 * 60
+# How much of a failing case's output (stdout and stderr, interleaved) the log and the summary show.
+TAIL_LINES = 30
 # The image's own package-manager family (for `needs` and the sudo set-up), from os-release ID / ID_LIKE.
 NATIVE = {"debian": "apt", "ubuntu": "apt", "fedora": "dnf", "rocky": "dnf", "rockylinux": "dnf", "rhel": "dnf", "almalinux": "dnf",
           "centos": "dnf", "alpine": "apk", "amzn": "dnf", "amazonlinux": "dnf", "arch": "pacman", "archlinux": "pacman",
@@ -176,12 +178,20 @@ def run_case(doc, case):
             os.chmod(os.path.join(tmp, name), 0o644)
         started = time.time()
         try:
+            # stderr into stdout, so the tail reads in the order it was written (the error beside its step).
             result = subprocess.run(["docker", "run", "--rm", "-v", f"{tmp}:/t:ro", case["image"], "sh", "/t/case.sh"],
-                                    capture_output=True, text=True, timeout=TIMEOUT)
-            code, output = result.returncode, result.stdout + result.stderr
-        except subprocess.TimeoutExpired:
-            code, output = 124, "timed out"
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=TIMEOUT)
+            code, output = result.returncode, result.stdout.decode("utf-8", "replace")
+        except subprocess.TimeoutExpired as error:
+            partial = error.stdout or b""
+            code, output = 124, (partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial) + "\ntimed out"
         return code, output, time.time() - started
+
+
+def tail(output, lines=TAIL_LINES):
+    """The last `lines` lines of a case's output, indented under its result line (empty lines dropped)."""
+    kept = [line.rstrip() for line in output.splitlines() if line.strip()][-lines:]
+    return "\n".join("      | " + line for line in kept) if kept else "      | (no output)"
 
 
 def main():
@@ -197,7 +207,7 @@ def main():
     with open(os.path.join(ROOT, "ci", "images.json")) as handle:
         matrix = json.load(handle)
 
-    rows, failed = [], 0
+    rows, failed, failures = [], 0, []
     for case in plan(doc, matrix, args):
         label = f"{case['image']:<14} {case['mode']:<4} {case['family']:<7} {case['intent']}"
         if case["skip"]:
@@ -222,9 +232,14 @@ def main():
             status, note = ("XFAIL", xfail) if xfail else ("FAIL", why)
             if status == "FAIL":
                 failed += 1
-                print(output[-3000:])
         rows.append((case, status, note))
         print(f"{status:<5} {label} ({seconds:.0f} s){': ' + note if note else ''}", flush=True)
+        if status == "FAIL":
+            # The diagnosis: what the recipe (or its check) printed last, right under the FAIL line.
+            print(f"      last {TAIL_LINES} lines of output:\n{tail(output)}", flush=True)
+            failures.append((label, note, tail(output)))
+            if os.environ.get("GITHUB_ACTIONS") == "true":
+                print(f"::error title=recipe FAIL::{label.split()[0]} {case['mode']} {case['intent']}: {note}")
 
     if args.summary and not args.list:
         with open(args.summary, "a") as handle:
@@ -232,6 +247,8 @@ def main():
             for case, status, note in rows:
                 handle.write(f"| {case['image']} | {case['mode']} | {case['family']} | `{case['intent']}` | "
                              f"{status} | {str(note).replace('|', '/')} |\n")
+            for label, note, text in failures:
+                handle.write(f"\n<details><summary>FAIL {label}: {note}</summary>\n\n```\n{text}\n```\n</details>\n")
     counts = {s: sum(1 for _, st, _ in rows if st == s) for s in ("PASS", "FAIL", "XFAIL", "XPASS", "SKIP")}
     print("summary: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
     return 1 if failed else 0
