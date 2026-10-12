@@ -15,7 +15,7 @@
      "pop"
     ]
    },
-   "reason": "The AppArmor branch loads its profile with apparmor_parser -r (no systemd needed; serial 3 restarted apparmor.service, which fails without systemd) and runs only where apparmor_parser exists (no AppArmor userspace: nothing to load into, and a container on a restricting host has no /etc/apparmor.d: the serial-3 GitHub runner failure). A profile file of ours that exists but is not loaded (/sys/kernel/security/apparmor/profiles) is loaded (review 2026-10-12)."
+   "reason": "The AppArmor branch loads its profile with apparmor_parser -r (no systemd needed; serial 3 restarted apparmor.service, which fails without systemd) and runs only where apparmor_parser exists (no AppArmor userspace: nothing to load into, and a container on a restricting host has no /etc/apparmor.d: the serial-3 GitHub runner failure). A profile file of ours that exists but is not loaded (/sys/kernel/security/apparmor/policy/profiles/*/name, readable without root) is loaded (review 2026-10-12)."
   },
   {
    "intent": "engine.docker.rootless-prepare",
@@ -27,7 +27,7 @@
      "kali"
     ]
    },
-   "reason": "Kali keeps the Debian family's apt text: the same apparmor_parser change. A profile file of ours that exists but is not loaded (/sys/kernel/security/apparmor/profiles) is loaded (review 2026-10-12)."
+   "reason": "Kali keeps the Debian family's apt text: the same apparmor_parser change. A profile file of ours that exists but is not loaded (/sys/kernel/security/apparmor/policy/profiles/*/name, readable without root) is loaded (review 2026-10-12)."
   },
   {
    "intent": "tmux.install",
