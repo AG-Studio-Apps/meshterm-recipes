@@ -39,7 +39,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TIMEOUT = 20 * 60
 # The image's own package-manager family (for `needs` and the sudo set-up), from os-release ID / ID_LIKE.
 NATIVE = {"debian": "apt", "ubuntu": "apt", "fedora": "dnf", "rocky": "dnf", "rockylinux": "dnf", "rhel": "dnf", "almalinux": "dnf",
-          "centos": "dnf", "alpine": "apk"}
+          "centos": "dnf", "alpine": "apk", "amzn": "dnf", "amazonlinux": "dnf"}
 SUDO_SETUP = {
     "apt": "apt-get update -qq && apt-get install -y -qq sudo >/dev/null && rm -rf /var/lib/apt/lists/* "
            "&& useradd -m -s /bin/sh mt",

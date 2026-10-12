@@ -57,6 +57,10 @@
               "rootOnly": "the script calls sudo itself; the sudo-user pass is the same script",
               "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers it to apt and unknown hosts only)"}}}
 ,
+      {"families": ["unknown"], "ids": ["amzn"], "versions": {"min": "2023"}, "run": "{{sudo}}dnf install -y docker",
+       "ci": {"check": "command -v docker && command -v dockerd"}},
+      {"families": ["unknown"], "ids": ["amzn"], "versions": {"below": "2023"}, "run": "{{sudo}}yum install -y amazon-linux-extras && {{sudo}}amazon-linux-extras install -y docker",
+       "ci": {"skip": "Amazon Linux 2 (end of life 2026-06-30) is not in the matrix; proved by hand on amazonlinux:2 (2026-10-12), root and sudo user"}},
       {"families": ["unknown"], "ids": ["rhel", "centos", "rocky", "almalinux", "ol"], "run": "{{sudo}}dnf install -y dnf-plugins-core && {{sudo}}dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo && {{sudo}}dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin",
        "ci": {"check": "command -v docker && command -v dockerd && docker compose version"}}
     ],
@@ -147,7 +151,8 @@
       {"families": ["any"], "run": "curl -fsSL https://get.docker.com | sh", "admin": true,
        "ci": {"needs": ["curl", "caCertificates"], "check": "docker compose version",
               "rootOnly": "the script calls sudo itself; the sudo-user pass is the same script",
-              "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers this where the stacks probe says Docker's repository: Debian, Raspberry Pi OS)"}}}
+              "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers this where the stacks probe says Docker's repository: Debian, Raspberry Pi OS)",
+                         "amazonlinux:2023": "get.docker.com does not support Amazon Linux (the app offers this where the stacks probe says Docker's repository: Debian, Raspberry Pi OS)"}}}
 ,
       {"families": ["any"], "ids": ["rhel", "centos", "rocky", "almalinux", "ol"], "run": "{{sudo}}dnf install -y dnf-plugins-core && {{sudo}}dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo && {{sudo}}dnf install -y docker-compose-plugin",
        "ci": {"check": "/usr/libexec/docker/cli-plugins/docker-compose version"}}
@@ -200,6 +205,12 @@
       {"families": ["apt"], "ids": ["debian"], "versions": {"below": "12"}, "run": "{{sudo}}apt install -y {{packages}}",
        "ci": {"packages": ["uidmap", "slirp4netns"], "before": "apt-get update",
               "check": "command -v newuidmap && command -v slirp4netns"}},
+      {"families": ["apt"], "ids": ["pop"], "versions": {"below": "24.04"}, "run": "{{sudo}}apt install -y {{packages}}",
+       "ci": {"skip": "no official pop image; the same line as below Ubuntu 24.04, proved there"}},
+      {"families": ["apt"], "ids": ["linuxmint"], "versions": {"below": "22"}, "run": "{{sudo}}apt install -y {{packages}}",
+       "ci": {"skip": "no official linuxmint image; the same line as below Ubuntu 24.04, proved there"}},
+      {"families": ["apt"], "ids": ["raspbian"], "versions": {"below": "12"}, "run": "{{sudo}}apt install -y {{packages}}",
+       "ci": {"skip": "no official raspbian image; the same line as below Debian 12, proved there"}},
       {"families": ["dnf"], "ids": ["fedora", "rhel", "centos", "rocky", "almalinux"], "run": "{{sudo}}dnf install -y {{packages}}",
        "ci": {"packages": ["slirp4netns"], "check": "command -v slirp4netns"}}
     ]
