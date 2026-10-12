@@ -260,6 +260,15 @@
    "intent": "sshd.reload",
    "selector": {
     "families": [
+     "any"
+    ]
+   },
+   "reason": "VM tier 2026-10-12: Ubuntu 24.04's socket-activated ssh with ssh.service inactive failed `reload ssh` (not active) and `reload sshd` (no unit), exit 5; reload-or-try-restart reloads a running unit and is a no-op on an inactive one (the next connection starts sshd with the new config). The pre-229 name of try-reload-or-restart, so systemd 219 (EL7, Amazon Linux 2) has it too"
+  },
+  {
+   "intent": "sshd.reload",
+   "selector": {
+    "families": [
      "apk"
     ]
    },
@@ -291,6 +300,15 @@
     ]
    },
    "reason": "A4/A10/Q5 (owner 2026-10-12): enable linger without sudo first (polkit may allow it over SSH), sudo only when that is refused, so a non-admin is not sent to an admin needlessly"
+  },
+  {
+   "intent": "engine.rootless.apparmor-userns",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "VM tier 2026-10-12: a no-op when a profile already names the path (Ubuntu 24.04 ships /etc/apparmor.d/rootlesskit), the rootless preparation's own guard; it wrote a second profile there"
   },
   {
    "package": "sudo",

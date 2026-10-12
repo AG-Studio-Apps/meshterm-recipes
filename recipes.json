@@ -260,7 +260,7 @@
        "ci": {"before": "printf '#!/bin/sh\\n[ \"$1\" = --no-ask-password ] && shift && [ \"$(id -u)\" != 0 ] && { echo \"Could not enable linger: Interactive authentication required.\" >&2; exit 1; }\\n[ \"$(id -u)\" = 0 ] && [ \"$1\" = enable-linger ] && mkdir -p /var/lib/systemd/linger && touch \"/var/lib/systemd/linger/$2\"\\n' > /usr/bin/loginctl && chmod +x /usr/bin/loginctl", "check": "test -f \"/var/lib/systemd/linger/$MT_USER\""}}
     ],
     "engine.rootless.apparmor-userns": [
-      {"families": ["any"], "run": "f=$(echo {{path}} | sed -e 's@^/@@' -e 's@/@.@g') && { echo 'abi <abi/4.0>,'; echo 'include <tunables/global>'; echo '\"{{path}}\" flags=(unconfined) {'; echo '  userns,'; echo '}'; } | {{sudo}}tee \"/etc/apparmor.d/$f\" >/dev/null && {{sudo}}systemctl restart apparmor.service",
+      {"families": ["any"], "run": "if ! grep -rqs \"{{path}}\" /etc/apparmor.d; then f=$(echo {{path}} | sed -e 's@^/@@' -e 's@/@.@g') && { echo 'abi <abi/4.0>,'; echo 'include <tunables/global>'; echo '\"{{path}}\" flags=(unconfined) {'; echo '  userns,'; echo '}'; } | {{sudo}}tee \"/etc/apparmor.d/$f\" >/dev/null && {{sudo}}systemctl restart apparmor.service; fi",
        "ci": {"before": "mkdir -p /etc/apparmor.d /usr/local/bin && printf '#!/bin/sh\\nexit 0\\n' > /usr/local/bin/systemctl && chmod +x /usr/local/bin/systemctl", "path": "/usr/bin/rootlesskit", "check": "printf 'abi <abi/4.0>,\\ninclude <tunables/global>\\n\"/usr/bin/rootlesskit\" flags=(unconfined) {\\n  userns,\\n}\\n' | cmp - /etc/apparmor.d/usr.bin.rootlesskit", "skipOn": {"debian:12": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "debian:13": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "ubuntu:22.04": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "fedora:latest": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "rockylinux/rockylinux:9": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "alpine:3.20": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "amazonlinux:2023": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "archlinux:latest": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)", "opensuse/leap:15.6": "AppArmor's userns restriction is Ubuntu 23.10+: proved on ubuntu:24.04 (systemctl stubbed)"}}}
     ],
     "engine.docker.start-service-systemd": [
@@ -314,7 +314,7 @@
        "ci": {"skip": "starts sshd through OpenRC"}}
     ],
     "sshd.reload": [
-      {"families": ["any"], "run": "{{sudo}}systemctl reload ssh || {{sudo}}systemctl reload sshd",
+      {"families": ["any"], "run": "{{sudo}}systemctl reload-or-try-restart ssh 2>/dev/null || {{sudo}}systemctl reload-or-try-restart sshd",
        "ci": {"skip": "systemd is not running in a container"}},
       {"families": ["apk"], "run": "{{sudo}}rc-service sshd reload",
        "ci": {"skip": "OpenRC is not running in a container"}}
