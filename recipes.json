@@ -1,8 +1,8 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 1,
-  "date": "2026-10-11",
+  "serial": 2,
+  "date": "2026-10-12",
   "packages": {
     "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
     "caCertificates": {"apt": "ca-certificates", "apk": "ca-certificates"},
@@ -35,8 +35,9 @@
       {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y {{packages}}",
        "ci": {"check": "command -v curl && command -v python3 && command -v gawk && command -v bwrap && command -v ps && test -f /etc/ssl/certs/ca-certificates.crt"}},
       {"families": ["dnf"], "run": "{{sudo}}dnf install -y {{packages}}",
-       "ci": {"check": "command -v curl && command -v python3 && command -v gawk && command -v bwrap && command -v ps && command -v sha256sum",
-              "xfail": {"rockylinux/rockylinux:9": "EL9 ships curl-minimal, which conflicts with the curl package: dnf refuses the whole line. A candidate fix for a later serial (map curl to nothing on EL9, or --allowerasing)"}}},
+       "ci": {"check": "command -v curl && command -v python3 && command -v gawk && command -v bwrap && command -v ps && command -v sha256sum"}},
+      {"families": ["dnf"], "ids": ["rhel", "centos", "rocky", "almalinux", "ol"], "run": "{{sudo}}dnf install -y --allowerasing {{packages}}",
+       "ci": {"check": "command -v curl && rpm -q curl && command -v python3 && command -v gawk && command -v bwrap && command -v ps && command -v sha256sum"}},
       {"families": ["yum"], "run": "{{sudo}}yum install -y {{packages}}",
        "ci": {"check": "command -v curl && command -v python3 && command -v gawk && command -v bwrap && command -v ps"}},
       {"families": ["apk"], "run": "{{sudo}}apk add {{packages}}",
@@ -54,8 +55,10 @@
       {"families": ["apt", "unknown"], "run": "curl -fsSL https://get.docker.com | sh", "admin": true,
        "ci": {"needs": ["curl", "caCertificates"], "check": "command -v docker && command -v dockerd",
               "rootOnly": "the script calls sudo itself; the sudo-user pass is the same script",
-              "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers it to apt and unknown hosts only)"},
-              "xfail": {"rockylinux/rockylinux:9": "get.docker.com adds download.docker.com/linux/rocky, which has no docker-ce (measured 2026-10-12). The app offers this script only to apt and unknown hosts; an unknown EL-like host (Oracle, Amazon) may meet it: a candidate fix for a later serial"}}}
+              "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers it to apt and unknown hosts only)"}}}
+,
+      {"families": ["unknown"], "ids": ["rhel", "centos", "rocky", "almalinux", "ol"], "run": "{{sudo}}dnf install -y dnf-plugins-core && {{sudo}}dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo && {{sudo}}dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin",
+       "ci": {"check": "command -v docker && command -v dockerd && docker compose version"}}
     ],
     "engine.docker.install-alpine": [
       {"families": ["apk"], "run": "{{sudo}}apk add docker docker-cli-compose && {{sudo}}rc-update add docker default && {{sudo}}rc-service docker start && {{sudo}}addgroup {{user}} docker",
@@ -131,9 +134,10 @@
     "compose.install-package": [
       {"families": ["apt"], "ids": ["ubuntu", "linuxmint", "pop"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y docker-compose-v2",
        "ci": {"check": "test -x /usr/libexec/docker/cli-plugins/docker-compose"}},
+      {"families": ["dnf"], "ids": ["rhel", "centos", "rocky", "almalinux"], "run": "{{sudo}}dnf install -y dnf-plugins-core && {{sudo}}dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo && {{sudo}}dnf install -y docker-compose-plugin",
+       "ci": {"check": "/usr/libexec/docker/cli-plugins/docker-compose version"}},
       {"families": ["dnf"], "run": "{{sudo}}dnf install -y docker-compose",
-       "ci": {"check": "command -v docker-compose",
-              "xfail": {"rockylinux/rockylinux:9": "Rocky 9 (and RHEL 9) ship no docker-compose package: a candidate fix for a later serial"}}},
+       "ci": {"check": "command -v docker-compose"}},
       {"families": ["apk"], "run": "{{sudo}}apk add docker-cli-compose",
        "ci": {"check": "test -x /usr/libexec/docker/cli-plugins/docker-compose"}},
       {"families": ["macos"], "run": "brew install docker-compose",
@@ -143,8 +147,10 @@
       {"families": ["any"], "run": "curl -fsSL https://get.docker.com | sh", "admin": true,
        "ci": {"needs": ["curl", "caCertificates"], "check": "docker compose version",
               "rootOnly": "the script calls sudo itself; the sudo-user pass is the same script",
-              "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers this where the stacks probe says Docker's repository: Debian, Raspberry Pi OS)"},
-              "xfail": {"rockylinux/rockylinux:9": "get.docker.com adds download.docker.com/linux/rocky, which has no docker-ce (measured 2026-10-12). The app offers this script only to apt and unknown hosts; an unknown EL-like host (Oracle, Amazon) may meet it: a candidate fix for a later serial"}}}
+              "skipOn": {"alpine:3.20": "get.docker.com does not support Alpine (the app offers this where the stacks probe says Docker's repository: Debian, Raspberry Pi OS)"}}}
+,
+      {"families": ["any"], "ids": ["rhel", "centos", "rocky", "almalinux", "ol"], "run": "{{sudo}}dnf install -y dnf-plugins-core && {{sudo}}dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo && {{sudo}}dnf install -y docker-compose-plugin",
+       "ci": {"check": "/usr/libexec/docker/cli-plugins/docker-compose version"}}
     ],
     "compose.install-binary-docker": [
       {"families": ["apt", "dnf", "unknown"], "run": "{{sudo}}mkdir -p /usr/local/lib/docker/cli-plugins && {{sudo}}curl -fsSL \"https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)\" -o /usr/local/lib/docker/cli-plugins/docker-compose && {{sudo}}chmod +x /usr/local/lib/docker/cli-plugins/docker-compose",
@@ -187,8 +193,13 @@
     "podman.rootless-prerequisites": [
       {"families": ["apt"], "ids": ["ubuntu", "debian", "raspbian", "linuxmint", "pop"], "run": "{{sudo}}apt install -y {{packages}} passt",
        "ci": {"packages": ["uidmap", "slirp4netns"], "before": "apt-get update",
-              "check": "command -v newuidmap && command -v slirp4netns && command -v passt",
-              "xfail": {"ubuntu:22.04": "Ubuntu 22.04 has no passt package: a candidate fix for a later serial"}}},
+              "check": "command -v newuidmap && command -v slirp4netns && command -v passt"}},
+      {"families": ["apt"], "ids": ["ubuntu"], "versions": {"below": "24.04"}, "run": "{{sudo}}apt install -y {{packages}}",
+       "ci": {"packages": ["uidmap", "slirp4netns"], "before": "apt-get update",
+              "check": "command -v newuidmap && command -v slirp4netns"}},
+      {"families": ["apt"], "ids": ["debian"], "versions": {"below": "12"}, "run": "{{sudo}}apt install -y {{packages}}",
+       "ci": {"packages": ["uidmap", "slirp4netns"], "before": "apt-get update",
+              "check": "command -v newuidmap && command -v slirp4netns"}},
       {"families": ["dnf"], "ids": ["fedora", "rhel", "centos", "rocky", "almalinux"], "run": "{{sudo}}dnf install -y {{packages}}",
        "ci": {"packages": ["slirp4netns"], "check": "command -v slirp4netns"}}
     ]
