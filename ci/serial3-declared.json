@@ -15,7 +15,7 @@
      "almalinux"
     ]
    },
-   "reason": "Fedora/EL rootless Docker: packages, the iptables kernel modules (loaded and persisted) and linger in ONE admin step before the setuptool (the Fedora device failure: 'modprobe ip_tables')"
+   "reason": "Fedora/EL rootless Docker: packages, the iptables kernel modules (loaded and persisted) and linger in ONE admin step before the setuptool (the Fedora device failure: 'modprobe ip_tables'); a module built into the kernel (modules.builtin, /sys/module without /proc/modules, or /proc/config.gz =y: WSL2, many distro kernels) counts as present and gets no modules-load.d line (pre-TestFlight review: it failed 'Could not load the nf_tables kernel module' for everyone)"
   },
   {
    "intent": "engine.docker.rootless-prepare",
@@ -44,7 +44,7 @@
      "pop"
     ]
    },
-   "reason": "Debian family (owner override of answer 10): uidmap, slirp4netns, dbus-user-session, the kernel modules, the AppArmor profile where needed and linger, in ONE admin step"
+   "reason": "Debian family (owner override of answer 10): uidmap, slirp4netns, dbus-user-session, the kernel modules, the AppArmor profile where needed (a fixed-string grep guard) and linger, in ONE admin step; a built-in kernel module counts as present, as on dnf"
   },
   {
    "intent": "engine.docker.rootless-prepare",
@@ -145,7 +145,7 @@
      "min": "13"
     }
    },
-   "reason": "3.7: an installed docker.io on Debian 13 gets Compose from the distribution (docker-compose) instead of replacing the engine with Docker's"
+   "reason": "3.7: an installed docker.io on Debian 13 gets Compose from the distribution (docker-compose) instead of replacing the engine with Docker's; a host whose Docker came from Docker's repository (docker-ce installed) gets docker-compose-plugin from it instead (pre-TestFlight review: Debian's docker-compose removed docker-ce)"
   },
   {
    "intent": "podman.rootless-prerequisites",
@@ -263,7 +263,7 @@
      "any"
     ]
    },
-   "reason": "VM tier 2026-10-12: Ubuntu 24.04's socket-activated ssh with ssh.service inactive failed `reload ssh` (not active) and `reload sshd` (no unit), exit 5; reload-or-try-restart reloads a running unit and is a no-op on an inactive one (the next connection starts sshd with the new config). The pre-229 name of try-reload-or-restart, so systemd 219 (EL7, Amazon Linux 2) has it too"
+   "reason": "VM tier 2026-10-12: Ubuntu 24.04's socket-activated ssh with ssh.service inactive failed `reload ssh` (not active) and `reload sshd` (no unit), exit 5; reload-or-try-restart reloads a running unit and is a no-op on an inactive one (the next connection starts sshd with the new config). The pre-229 name of try-reload-or-restart, so systemd 219 (EL7, Amazon Linux 2) has it too. A host without systemd (Devuan, Artix) falls through to `rc-service sshd reload`, then `service ssh reload` (as the forwarding script's sshdReloadAnyOS)"
   },
   {
    "intent": "sshd.reload",
@@ -308,7 +308,7 @@
      "any"
     ]
    },
-   "reason": "VM tier 2026-10-12: a no-op when a profile already names the path (Ubuntu 24.04 ships /etc/apparmor.d/rootlesskit), the rootless preparation's own guard; it wrote a second profile there"
+   "reason": "VM tier 2026-10-12: a no-op when a profile already names the path (Ubuntu 24.04 ships /etc/apparmor.d/rootlesskit), the rootless preparation's own guard; it wrote a second profile there. grep -F: the path is a fixed string, never a pattern"
   },
   {
    "package": "sudo",
