@@ -1,0 +1,99 @@
+{
+ "_comment": "Every app-visible change serial 4 makes against serial 3 (scripts/validate.py --declared ci/serial4-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 3>). Serial 3's own list stays in ci/serial3-declared.json (meshTerm's tests read a byte-identical copy of that one).",
+ "changes": [
+  {
+   "intent": "engine.docker.rootless-prepare",
+   "selector": {
+    "families": [
+     "apt"
+    ],
+    "ids": [
+     "debian",
+     "ubuntu",
+     "raspbian",
+     "linuxmint",
+     "pop"
+    ]
+   },
+   "reason": "The AppArmor branch loads its profile with apparmor_parser -r (no systemd needed; serial 3 restarted apparmor.service, which fails without systemd) and runs only where apparmor_parser exists (no AppArmor userspace: nothing to load into, and a container on a restricting host has no /etc/apparmor.d: the serial-3 GitHub runner failure)"
+  },
+  {
+   "intent": "engine.docker.rootless-prepare",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "kali"
+    ]
+   },
+   "reason": "Kali keeps the Debian family's apt text: the same apparmor_parser change"
+  },
+  {
+   "intent": "tmux.install",
+   "selector": {
+    "families": [
+     "pacman"
+    ]
+   },
+   "reason": "Arch: pacman -Syu --needed (a fresh Arch has no sync database, so -S alone fails 'target not found'; -Syu, never -Sy alone, as sudo.install does, so no partial upgrade)"
+  },
+  {
+   "intent": "git.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ]
+   },
+   "reason": "The unknown-family chain gains zypper and pacman (Containers sends Arch and openSUSE as unknown) and fails with a message where no package manager it knows is found (serial 3 exited 0 having installed nothing)"
+  },
+  {
+   "intent": "ca-certificates.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ]
+   },
+   "reason": "The unknown-family chain gains zypper (ca-certificates with ca-certificates-mozilla, the bundle) and pacman, and fails with a message where no package manager it knows is found"
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "arch"
+    ]
+   },
+   "reason": "Arch: get.docker.com refuses it ('Unsupported distribution'); Arch's docker package, enabled and started where systemd runs"
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "endeavouros",
+     "manjaro"
+    ]
+   },
+   "reason": "Manjaro and EndeavourOS (Arch-based): the Arch text"
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "opensuse-leap",
+     "opensuse-slowroll",
+     "opensuse-tumbleweed"
+    ]
+   },
+   "reason": "openSUSE: get.docker.com refuses it; openSUSE's docker package, enabled and started where systemd runs"
+  }
+ ]
+}
