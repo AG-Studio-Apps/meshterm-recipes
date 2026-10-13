@@ -1,7 +1,7 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 6,
+  "serial": 7,
   "date": "2026-10-13",
   "packages": {
     "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
@@ -222,6 +222,18 @@
     "podman.socket-restart-service": [
       {"families": ["any"], "run": "if command -v pkill >/dev/null; then pkill -u \"$(id -u)\" -x -f 'podman system service --time=0'; fi; sleep 1; p=$(podman info 2>/dev/null | grep -o '/[^ ]*/podman[.]sock' | head -n 1); if [ -n \"$p\" ]; then rm -f \"$p\"; fi; S=; if command -v setsid >/dev/null; then S=setsid; fi; ($S nohup podman system service --time=0 >/dev/null 2>&1 </dev/null &); i=0; until podman --remote info >/dev/null 2>&1 || [ $i -ge 10 ]; do i=$((i+1)); sleep 1; done; podman --remote info >/dev/null 2>&1 || { echo \"Podman's API service did not start\"; false; }",
        "ci": {"before": "mkdir -p /mt-ci && chmod 777 /mt-ci && : > /mt-ci/podman.log && chmod 666 /mt-ci/podman.log && mkdir -p /usr/local/bin && printf '#!/bin/sh\\ncase \"$*\" in\\n*--remote*) [ -e /mt-ci/started ] ;;\\n*\"system service\"*) echo \"$*\" >> /mt-ci/podman.log; touch /mt-ci/started ;;\\n*) echo \"$*\" >> /mt-ci/podman.log ;;\\nesac\\n' > /usr/local/bin/podman && chmod +x /usr/local/bin/podman", "check": "grep -qx 'system service --time=0' /mt-ci/podman.log && test -e /mt-ci/started"}}
+    ],
+    "podman.rootless-subids": [
+      {"families": ["apk"], "run": "{{sudo}}apk add shadow-uidmap && u=$(id -un {{user}}) && ok=1 && for f in /etc/subuid /etc/subgid; do if ! grep -q \"^$u:\" \"$f\" 2>/dev/null; then s=$(awk -F: 'BEGIN { m = 100000 } { e = $2 + $3; if (e > m) m = e } END { print m }' \"$f\" 2>/dev/null); if [ -z \"$s\" ]; then s=100000; fi; echo \"$u:$s:65536\" | {{sudo}}tee -a \"$f\" >/dev/null || ok=; fi; done && [ -n \"$ok\" ]", "admin": true,
+       "ci": {"before": "touch /etc/subuid /etc/subgid && sed -i '/^mt:/d;/^root:/d' /etc/subuid /etc/subgid && echo 'other:100000:65536' >> /etc/subuid && echo 'other:100000:65536' >> /etc/subgid", "check": "command -v newuidmap && grep -qx \"$MT_USER:165536:65536\" /etc/subuid && grep -qx \"$MT_USER:165536:65536\" /etc/subgid && [ \"$(grep -c \"^$MT_USER:\" /etc/subuid)\" = 1 ]"}},
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y uidmap && u=$(id -un {{user}}) && ok=1 && for f in /etc/subuid /etc/subgid; do if ! grep -q \"^$u:\" \"$f\" 2>/dev/null; then s=$(awk -F: 'BEGIN { m = 100000 } { e = $2 + $3; if (e > m) m = e } END { print m }' \"$f\" 2>/dev/null); if [ -z \"$s\" ]; then s=100000; fi; echo \"$u:$s:65536\" | {{sudo}}tee -a \"$f\" >/dev/null || ok=; fi; done && [ -n \"$ok\" ]", "admin": true,
+       "ci": {"before": "touch /etc/subuid /etc/subgid && sed -i '/^mt:/d;/^root:/d' /etc/subuid /etc/subgid && echo 'other:100000:65536' >> /etc/subuid && echo 'other:100000:65536' >> /etc/subgid", "check": "command -v newuidmap && grep -qx \"$MT_USER:165536:65536\" /etc/subuid && grep -qx \"$MT_USER:165536:65536\" /etc/subgid && [ \"$(grep -c \"^$MT_USER:\" /etc/subuid)\" = 1 ]", "su": true}},
+      {"families": ["any"], "run": "u=$(id -un {{user}}) && ok=1 && for f in /etc/subuid /etc/subgid; do if ! grep -q \"^$u:\" \"$f\" 2>/dev/null; then s=$(awk -F: 'BEGIN { m = 100000 } { e = $2 + $3; if (e > m) m = e } END { print m }' \"$f\" 2>/dev/null); if [ -z \"$s\" ]; then s=100000; fi; echo \"$u:$s:65536\" | {{sudo}}tee -a \"$f\" >/dev/null || ok=; fi; done && [ -n \"$ok\" ]", "admin": true,
+       "ci": {"before": "touch /etc/subuid /etc/subgid && sed -i '/^mt:/d;/^root:/d' /etc/subuid /etc/subgid && echo 'other:100000:65536' >> /etc/subuid && echo 'other:100000:65536' >> /etc/subgid", "check": "grep -qx \"$MT_USER:165536:65536\" /etc/subuid && grep -qx \"$MT_USER:165536:65536\" /etc/subgid && [ \"$(grep -c \"^$MT_USER:\" /etc/subuid)\" = 1 ]"}}
+    ],
+    "podman.rootless-migrate": [
+      {"families": ["any"], "run": "podman system migrate",
+       "ci": {"before": "mkdir -p /mt-ci && chmod 777 /mt-ci && : > /mt-ci/podman.log && chmod 666 /mt-ci/podman.log && mkdir -p /usr/local/bin && printf '#!/bin/sh\\necho \"$*\" >> /mt-ci/podman.log\\n' > /usr/local/bin/podman && chmod +x /usr/local/bin/podman", "check": "grep -qx 'system migrate' /mt-ci/podman.log"}}
     ],
     "git.install": [
       {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y git",
