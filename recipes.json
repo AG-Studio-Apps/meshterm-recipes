@@ -89,6 +89,15 @@
        "ci": {"check": "command -v podman"}},
       {"families": ["dnf"], "run": "{{sudo}}dnf install -y podman",
        "ci": {"check": "command -v podman"}}
+,
+      {"families": ["unknown"], "ids": ["arch"], "run": "PATH=\"$PATH:/usr/sbin:/sbin\"; v=\"/usr/lib/modules/$(uname -r)\"; k=; if [ -f \"$v/vmlinuz\" ]; then k=\"$v/vmlinuz\"; elif [ -d \"$v\" ]; then k=\"$v\"; fi; {{sudo}}pacman -S --noconfirm --needed podman || {{sudo}}pacman -Syu --noconfirm --needed podman && if [ -n \"$k\" ] && [ ! -e \"$k\" ]; then echo \"The kernel was updated: reboot the server, then tap Check Again\"; false; fi",
+       "ci": {"check": "command -v podman"}},
+      {"families": ["unknown"], "ids": ["manjaro", "endeavouros", "garuda", "cachyos"], "run": "PATH=\"$PATH:/usr/sbin:/sbin\"; v=\"/usr/lib/modules/$(uname -r)\"; k=; if [ -f \"$v/vmlinuz\" ]; then k=\"$v/vmlinuz\"; elif [ -d \"$v\" ]; then k=\"$v\"; fi; {{sudo}}pacman -S --noconfirm --needed podman || {{sudo}}pacman -Syu --noconfirm --needed podman && if [ -n \"$k\" ] && [ ! -e \"$k\" ]; then echo \"The kernel was updated: reboot the server, then tap Check Again\"; false; fi",
+       "ci": {"skip": "Manjaro and EndeavourOS: the Arch text, proved on archlinux:latest"}},
+      {"families": ["unknown"], "ids": ["opensuse-leap", "opensuse-tumbleweed", "opensuse-slowroll"], "run": "PATH=\"$PATH:/usr/sbin:/sbin\"; {{sudo}}zypper -n install -y podman; r=$?; case $r in 0|100|101|102|106|107) ;; *) false;; esac && command -v podman >/dev/null",
+       "ci": {"check": "command -v podman"}},
+      {"families": ["apk"], "run": "{{sudo}}apk add podman",
+       "ci": {"check": "command -v podman"}}
     ],
     "engine.docker-desktop.install": [
       {"families": ["macos"], "run": "brew install --cask docker-desktop",
