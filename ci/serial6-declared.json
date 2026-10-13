@@ -1,0 +1,59 @@
+{
+ "_comment": "Every app-visible change serial 6 makes against serial 5 (scripts/validate.py --declared ci/serial6-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 5>).",
+ "changes": [
+  {
+   "intent": "podman.socket-openrc",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "New: Podman's API socket on OpenRC (Alpine), for compose under rootless Podman. Alpine's podman-openrc runs the API service as a user when its conf.d names one (podman_user), so the SSH user gets its own instance, /etc/init.d/podman.<user> (a link to podman) with /etc/conf.d/podman.<user>, added to the default runlevel and started unless it already runs (restarted when it crashed). Its conf.d sets podman_uri empty, so an address set for the system service is never inherited. A root login uses the system service itself (engine.podman.start-openrc's), never a second one on the same socket. The service's start_pre runs modprobe tun and fuse, which fails on a container VPS (LXC, OpenVZ) that cannot load modules. The socket is the one podman info reports for that user (by default Alpine sets no XDG_RUNTIME_DIR: /tmp/storage-run-<uid>/podman/podman.sock), which compose dials. Before this, compose under rootless Podman on Alpine was installed but could not reach Podman (James 2026-10-13: 'failed to connect to the docker API at unix:///tmp/storage-run-1000/podman/podman.sock'). Rootful Podman keeps engine.podman.start-openrc (the system service). CI stubs rc-service and rc-update (OpenRC does not run in a container) and checks the link, the conf and the calls."
+  },
+  {
+   "intent": "podman.socket-service",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New: Podman's API service started in the background for the SSH user, for compose under Podman on a Linux with neither systemd nor Alpine's OpenRC service (Gentoo on OpenRC, Devuan, Void, Artix, WSL without systemd), which had no way to turn the socket on. Only when the socket does not answer (podman --remote info); a stale socket file left by a crash or a reboot with a kept /tmp is removed first (a new service cannot bind over it). setsid where present, and nohup, so it outlives the one-tap terminal; it does not survive a reboot. The line waits up to 10 s for the socket to answer and fails, saying so, when it does not. The socket is the one the user's own podman and compose use (the same environment). CI stubs podman (the socket answers once the service was asked for) and checks the service was started."
+  },
+  {
+   "intent": "podman.socket-restart-user",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New: Restart Podman API (James 2026-10-13) for rootless Podman on systemd: the user's socket and service restarted (a socket that answers nothing, or a service holding a stale state)."
+  },
+  {
+   "intent": "podman.socket-restart-system",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New: Restart Podman API for rootful Podman on systemd: the system socket and service restarted (sudo)."
+  },
+  {
+   "intent": "podman.socket-restart-openrc",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "New: Restart Podman API on OpenRC (Alpine): podman.socket-openrc's set-up (so it also works before the service was set up), then the service restarted. A root login restarts the system service."
+  },
+  {
+   "intent": "podman.socket-restart-service",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New: Restart Podman API where the service runs in the background (neither systemd nor Alpine's OpenRC service): the user's background service stopped (pkill -x -f on its exact command line, so a shell whose own command line carries this text is never matched; where pkill is present), then podman.socket-service's start, its stale-socket removal and its 10 s wait included."
+  }
+ ]
+}
