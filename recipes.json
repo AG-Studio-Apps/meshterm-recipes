@@ -1,7 +1,7 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 7,
+  "serial": 8,
   "date": "2026-10-13",
   "packages": {
     "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
