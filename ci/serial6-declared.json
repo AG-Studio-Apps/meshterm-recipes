@@ -8,7 +8,16 @@
      "apk"
     ]
    },
-   "reason": "New: Podman's API socket on OpenRC (Alpine), for compose under rootless Podman. Alpine's podman-openrc runs the API service as a user when its conf.d names one (podman_user), so the SSH user gets its own instance, /etc/init.d/podman.<user> (a link to podman) with /etc/conf.d/podman.<user>, added to the default runlevel and started unless it already runs. The socket is the one podman info reports for that user (no XDG_RUNTIME_DIR on Alpine: /tmp/storage-run-<uid>/podman/podman.sock), which compose dials. Before this, compose under rootless Podman on Alpine was installed but could not reach Podman (James 2026-10-13: 'failed to connect to the docker API at unix:///tmp/storage-run-1000/podman/podman.sock'). Rootful Podman keeps engine.podman.start-openrc (the system service). CI stubs rc-service and rc-update (OpenRC does not run in a container) and checks the link, the conf and the calls."
+   "reason": "New: Podman's API socket on OpenRC (Alpine), for compose under rootless Podman. Alpine's podman-openrc runs the API service as a user when its conf.d names one (podman_user), so the SSH user gets its own instance, /etc/init.d/podman.<user> (a link to podman) with /etc/conf.d/podman.<user>, added to the default runlevel and started unless it already runs (restarted when it crashed). Its conf.d sets podman_uri empty, so an address set for the system service is never inherited. A root login uses the system service itself (engine.podman.start-openrc's), never a second one on the same socket. The service's start_pre runs modprobe tun and fuse, which fails on a container VPS (LXC, OpenVZ) that cannot load modules. The socket is the one podman info reports for that user (by default Alpine sets no XDG_RUNTIME_DIR: /tmp/storage-run-<uid>/podman/podman.sock), which compose dials. Before this, compose under rootless Podman on Alpine was installed but could not reach Podman (James 2026-10-13: 'failed to connect to the docker API at unix:///tmp/storage-run-1000/podman/podman.sock'). Rootful Podman keeps engine.podman.start-openrc (the system service). CI stubs rc-service and rc-update (OpenRC does not run in a container) and checks the link, the conf and the calls."
+  },
+  {
+   "intent": "podman.socket-service",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New: Podman's API service started in the background for the SSH user, for compose under Podman on a Linux with neither systemd nor Alpine's OpenRC service (Gentoo on OpenRC, Devuan, Void, Artix, WSL without systemd), which had no way to turn the socket on. setsid and nohup so it outlives the one-tap terminal; it does not survive a reboot (the app says so). A second copy finds the socket in use and exits. The socket is the one the user's own podman and compose use (the same environment). CI stubs podman and checks it was asked for the service."
   }
  ]
 }

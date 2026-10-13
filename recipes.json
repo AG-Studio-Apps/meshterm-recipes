@@ -198,9 +198,14 @@
        "ci": {"skip": "systemd is not running in a container"}}
     ],
     "podman.socket-openrc": [
-      {"families": ["apk"], "run": "u=$(id -un {{user}}) && {{sudo}}apk add podman-openrc && if [ ! -e \"/etc/init.d/podman.$u\" ]; then {{sudo}}ln -s podman \"/etc/init.d/podman.$u\"; fi && printf 'podman_user=\"%s\"' \"$u\" | {{sudo}}tee \"/etc/conf.d/podman.$u\" >/dev/null && {{sudo}}rc-update add \"podman.$u\" default && if ! rc-service \"podman.$u\" status >/dev/null 2>&1; then {{sudo}}rc-service \"podman.$u\" start; fi", "admin": true,
+      {"families": ["apk"], "run": "u=$(id -un {{user}}) && s=podman && {{sudo}}apk add podman-openrc && if [ \"$u\" != root ]; then s=\"podman.$u\"; if [ ! -e \"/etc/init.d/$s\" ]; then {{sudo}}ln -s podman \"/etc/init.d/$s\"; fi && printf 'podman_user=\"%s\" podman_uri=' \"$u\" | {{sudo}}tee \"/etc/conf.d/$s\" >/dev/null; fi && {{sudo}}rc-update add \"$s\" default && { r=0; rc-service \"$s\" status >/dev/null 2>&1 || r=$?; if [ $r = 32 ]; then {{sudo}}rc-service \"$s\" restart; elif [ $r != 0 ]; then {{sudo}}rc-service \"$s\" start; fi; }", "admin": true,
        "ci": {"before": "printf '#!/bin/sh\\ncase \"$*\" in *status*) exit 3;; esac\\necho \"$0 $*\" >> /var/log/mt-openrc.log\\n' > /usr/local/bin/rc-service && cp /usr/local/bin/rc-service /usr/local/bin/rc-update && chmod +x /usr/local/bin/rc-service /usr/local/bin/rc-update && : > /var/log/mt-openrc.log && chmod 666 /var/log/mt-openrc.log && apk add -q podman",
-              "check": "test -L \"/etc/init.d/podman.$MT_USER\" && grep -qx \"podman_user=\\\"$MT_USER\\\"\" \"/etc/conf.d/podman.$MT_USER\" && grep -qx \"/usr/local/bin/rc-update add podman.$MT_USER default\" /var/log/mt-openrc.log && grep -qx \"/usr/local/bin/rc-service podman.$MT_USER start\" /var/log/mt-openrc.log"}}
+              "check": "if [ \"$MT_USER\" = root ]; then grep -qx '/usr/local/bin/rc-update add podman default' /var/log/mt-openrc.log && grep -qx '/usr/local/bin/rc-service podman start' /var/log/mt-openrc.log && test ! -e /etc/conf.d/podman.root; else test -L \"/etc/init.d/podman.$MT_USER\" && grep -qx \"podman_user=\\\"$MT_USER\\\" podman_uri=\" \"/etc/conf.d/podman.$MT_USER\" && grep -qx \"/usr/local/bin/rc-update add podman.$MT_USER default\" /var/log/mt-openrc.log && grep -qx \"/usr/local/bin/rc-service podman.$MT_USER start\" /var/log/mt-openrc.log; fi"}}
+    ],
+    "podman.socket-service": [
+      {"families": ["any"], "run": "(setsid nohup podman system service --time=0 >/dev/null 2>&1 </dev/null &) && sleep 1",
+       "ci": {"before": "mkdir -p /mt-ci && chmod 777 /mt-ci && : > /mt-ci/podman.log && chmod 666 /mt-ci/podman.log && mkdir -p /usr/local/bin && printf '#!/bin/sh\\necho \"$*\" >> /mt-ci/podman.log\\n' > /usr/local/bin/podman && chmod +x /usr/local/bin/podman",
+              "check": "sleep 1; grep -qx 'system service --time=0' /mt-ci/podman.log"}}
     ],
     "git.install": [
       {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y git",
