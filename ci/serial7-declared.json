@@ -8,7 +8,7 @@
      "apk"
     ]
    },
-   "reason": "New: rootless ID ranges for the SSH user (James 2026-10-13, Alpine: rootless Podman failed to unpack lscr.io/linuxserver/calibre-web with 'potentially insufficient UIDs or GIDs available in user namespace (requested 0:42 for /etc/gshadow)'). BusyBox adduser gives a new user no /etc/subuid or /etc/subgid entry, so any image with a file owned by a non-root id fails. Installs shadow-uidmap (newuidmap, newgidmap), then adds <user>:<start>:65536 to each file that has no entry for the user, the start past every existing range (at least 100000), so it never overlaps. An existing entry is left alone. CI removes the user's entries, adds another user's 100000:65536, and checks the user gets 165536:65536 once in each file."
+   "reason": "New: rootless ID ranges for the SSH user (James 2026-10-13, Alpine: rootless Podman failed to unpack lscr.io/linuxserver/calibre-web with 'potentially insufficient UIDs or GIDs available in user namespace (requested 0:42 for /etc/gshadow)'). BusyBox adduser gives a new user no /etc/subuid or /etc/subgid entry, so any image with a file owned by a non-root id fails. Installs shadow-uidmap (newuidmap, newgidmap), then adds <user>:<start>:65536 to each file that has no entry for the user, the start past every existing range (at least 100000), so it never overlaps. An existing entry for the user, by name or by numeric uid (the form newuidmap also reads), is left alone; when no free range is left below 2^32 the line fails, saying so, instead of writing an invalid one. CI removes the user's entries, adds another user's 100000:65536, and checks the user gets 165536:65536 once in each file."
   },
   {
    "intent": "podman.rootless-subids",
@@ -26,7 +26,7 @@
      "any"
     ]
    },
-   "reason": "New: the same for every other Linux (Fedora and EL, Arch, openSUSE and the rest), whose shadow package already has newuidmap: only the missing ranges are added."
+   "reason": "New: the same for every other Linux, whose shadow package already has newuidmap (Fedora, EL and Amazon Linux in shadow-utils, Arch, openSUSE, Void, Gentoo in shadow): only the missing ranges are added. Arch is the common case there: its useradd adds a range only when /etc/subuid already exists. An existing entry for the user, by name or by numeric uid, is left alone; when no free range is left below 2^32 the line fails, saying so."
   },
   {
    "intent": "podman.rootless-migrate",
