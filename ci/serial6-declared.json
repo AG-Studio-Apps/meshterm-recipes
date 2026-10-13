@@ -1,0 +1,14 @@
+{
+ "_comment": "Every app-visible change serial 6 makes against serial 5 (scripts/validate.py --declared ci/serial6-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 5>).",
+ "changes": [
+  {
+   "intent": "podman.socket-openrc",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "New: Podman's API socket on OpenRC (Alpine), for compose under rootless Podman. Alpine's podman-openrc runs the API service as a user when its conf.d names one (podman_user), so the SSH user gets its own instance, /etc/init.d/podman.<user> (a link to podman) with /etc/conf.d/podman.<user>, added to the default runlevel and started unless it already runs. The socket is the one podman info reports for that user (no XDG_RUNTIME_DIR on Alpine: /tmp/storage-run-<uid>/podman/podman.sock), which compose dials. Before this, compose under rootless Podman on Alpine was installed but could not reach Podman (James 2026-10-13: 'failed to connect to the docker API at unix:///tmp/storage-run-1000/podman/podman.sock'). Rootful Podman keeps engine.podman.start-openrc (the system service). CI stubs rc-service and rc-update (OpenRC does not run in a container) and checks the link, the conf and the calls."
+  }
+ ]
+}

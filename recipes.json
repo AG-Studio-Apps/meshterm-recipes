@@ -1,7 +1,7 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 5,
+  "serial": 6,
   "date": "2026-10-13",
   "packages": {
     "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
@@ -196,6 +196,11 @@
     "podman.socket-system": [
       {"families": ["any"], "run": "{ systemctl is-active --quiet podman.socket || {{sudo}}systemctl enable --now podman.socket; }", "admin": true,
        "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "podman.socket-openrc": [
+      {"families": ["apk"], "run": "u=$(id -un {{user}}) && {{sudo}}apk add podman-openrc && if [ ! -e \"/etc/init.d/podman.$u\" ]; then {{sudo}}ln -s podman \"/etc/init.d/podman.$u\"; fi && printf 'podman_user=\"%s\"' \"$u\" | {{sudo}}tee \"/etc/conf.d/podman.$u\" >/dev/null && {{sudo}}rc-update add \"podman.$u\" default && if ! rc-service \"podman.$u\" status >/dev/null 2>&1; then {{sudo}}rc-service \"podman.$u\" start; fi", "admin": true,
+       "ci": {"before": "printf '#!/bin/sh\\ncase \"$*\" in *status*) exit 3;; esac\\necho \"$0 $*\" >> /var/log/mt-openrc.log\\n' > /usr/local/bin/rc-service && cp /usr/local/bin/rc-service /usr/local/bin/rc-update && chmod +x /usr/local/bin/rc-service /usr/local/bin/rc-update && : > /var/log/mt-openrc.log && chmod 666 /var/log/mt-openrc.log && apk add -q podman",
+              "check": "test -L \"/etc/init.d/podman.$MT_USER\" && grep -qx \"podman_user=\\\"$MT_USER\\\"\" \"/etc/conf.d/podman.$MT_USER\" && grep -qx \"/usr/local/bin/rc-update add podman.$MT_USER default\" /var/log/mt-openrc.log && grep -qx \"/usr/local/bin/rc-service podman.$MT_USER start\" /var/log/mt-openrc.log"}}
     ],
     "git.install": [
       {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install -y git",
