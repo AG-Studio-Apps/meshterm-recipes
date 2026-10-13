@@ -44,7 +44,7 @@
      "fedora"
     ]
    },
-   "reason": "New: Docker on Fedora from Docker's own repository (the repo file written with curl, so dnf 4 and dnf 5 alike), Docker Engine with buildx and the Compose plugin, --allowerasing so Fedora's docker-cli (pulled in by Compose for Podman) or moby-engine is replaced, then the EL line's start and docker group join. Before this, a Fedora host knew no Docker install line, so the app offered only Podman (James 2026-10-13)."
+   "reason": "New: Docker on Fedora from Docker's own repository (the repo file written with curl, so dnf 4 and dnf 5 alike): Docker Engine with buildx and the Compose plugin, then the EL line's start and docker group join. Fedora's own Docker packages own the same files and declare no conflict (docker-cli, docker-compose, docker-buildx, moby-engine; podman-docker's /usr/bin/docker), so the installed ones are removed first, by name. Before this, a Fedora host knew no Docker install line, so the app offered only Podman (James 2026-10-13). CI starts from Podman with Fedora's Compose and checks Podman still works."
   }
  ]
 }
