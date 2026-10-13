@@ -1,0 +1,50 @@
+{
+ "_comment": "Every app-visible change serial 5 makes against serial 4 (scripts/validate.py --declared ci/serial5-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 4>).",
+ "changes": [
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "rhel",
+     "centos",
+     "rocky",
+     "almalinux",
+     "ol"
+    ]
+   },
+   "reason": "Replaced by the same line declared for dnf and unknown (below): the selector widens, the text is unchanged."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "dnf",
+     "unknown"
+    ],
+    "ids": [
+     "rhel",
+     "centos",
+     "rocky",
+     "almalinux",
+     "ol"
+    ]
+   },
+   "reason": "The EL line is also declared for the dnf family: meshTerm reads RHEL, CentOS, Rocky and AlmaLinux as dnf hosts, so serial 4's unknown-only selector never matched them there (Oracle Linux is read as unknown and keeps matching). Same text."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "dnf"
+    ],
+    "ids": [
+     "fedora"
+    ]
+   },
+   "reason": "New: Docker on Fedora from Docker's own repository (the repo file written with curl, so dnf 4 and dnf 5 alike), Docker Engine with buildx and the Compose plugin, --allowerasing so Fedora's docker-cli (pulled in by Compose for Podman) or moby-engine is replaced, then the EL line's start and docker group join. Before this, a Fedora host knew no Docker install line, so the app offered only Podman (James 2026-10-13)."
+  }
+ ]
+}
