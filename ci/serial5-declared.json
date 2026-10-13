@@ -1,0 +1,127 @@
+{
+ "_comment": "Every app-visible change serial 5 makes against serial 4 (scripts/validate.py --declared ci/serial5-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 4>).",
+ "changes": [
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "rhel",
+     "centos",
+     "rocky",
+     "almalinux",
+     "ol"
+    ]
+   },
+   "reason": "Replaced by the same line declared for dnf and unknown (below): the selector widens, the text is unchanged."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "dnf",
+     "unknown"
+    ],
+    "ids": [
+     "rhel",
+     "centos",
+     "rocky",
+     "almalinux",
+     "ol"
+    ]
+   },
+   "reason": "The EL line is also declared for the dnf family: meshTerm reads RHEL, CentOS, Rocky and AlmaLinux as dnf hosts, so serial 4's unknown-only selector never matched them there (Oracle Linux is read as unknown and keeps matching). Same text."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "dnf"
+    ],
+    "ids": [
+     "fedora"
+    ]
+   },
+   "reason": "New: Docker on Fedora from Docker's own repository (the repo file written with curl, so dnf 4 and dnf 5 alike): Docker Engine with buildx and the Compose plugin, then the EL line's start and docker group join. Fedora's own Docker packages own the same files and declare no conflict (docker-cli, docker-compose, docker-buildx, moby-engine; podman-docker's /usr/bin/docker), so the installed ones are removed by name, but only once Docker's packages resolved and downloaded (dnf --downloadonly): a release Docker's repository does not serve yet, or a network failure, leaves Fedora's packages in place. Before this, a Fedora host knew no Docker install line, so the app offered only Podman (James 2026-10-13). CI starts from Podman with Fedora's Compose and checks Podman still runs and Compose's plugin (the provider podman compose finds) is in place; podman itself cannot start inside the CI container."
+  },
+  {
+   "intent": "engine.podman.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "arch"
+    ]
+   },
+   "reason": "New: Podman on Arch with pacman, the Arch Docker line's shape: pacman -S first, -Syu only when the sync database is stale (the app labels it 'may update the system'), and the kernel-updated check that asks for a reboot. Read by meshTerm builds that ask for Podman on these hosts (2.3.0 on); older builds never ask, so nothing changes for them (James 2026-10-13). Goes straight to -Syu when updates are pending (pacman -Qu), as the Arch Docker line now does."
+  },
+  {
+   "intent": "engine.podman.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "manjaro",
+     "endeavouros",
+     "garuda",
+     "cachyos"
+    ]
+   },
+   "reason": "New: the Arch Podman text for Arch derivatives listed by id (as their Docker line). Read by meshTerm builds that ask for Podman on these hosts (2.3.0 on); older builds never ask, so nothing changes for them (James 2026-10-13)."
+  },
+  {
+   "intent": "engine.podman.install",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "opensuse-leap",
+     "opensuse-tumbleweed",
+     "opensuse-slowroll"
+    ]
+   },
+   "reason": "New: Podman on openSUSE with zypper, tolerating the same zypper exit codes as the Docker line, then checking podman is on the PATH. Read by meshTerm builds that ask for Podman on these hosts (2.3.0 on); older builds never ask, so nothing changes for them (James 2026-10-13)."
+  },
+  {
+   "intent": "engine.podman.install",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "New: Podman on Alpine with apk, and OpenRC's cgroups service added and started (Podman needs it). Read by meshTerm builds that ask for Podman on these hosts (2.3.0 on); older builds never ask, so nothing changes for them (James 2026-10-13)."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "arch"
+    ]
+   },
+   "reason": "Review 2026-10-13: when updates are already pending (pacman -Qu, no root needed) the line goes straight to pacman -Syu, so a retry after an aborted -Syu (an outdated keyring, a declined conflict) never installs against a synced but unupgraded database (a partial upgrade). Otherwise unchanged: pacman -S first, -Syu when the database is stale."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "manjaro",
+     "endeavouros",
+     "garuda",
+     "cachyos"
+    ]
+   },
+   "reason": "Review 2026-10-13: when updates are already pending (pacman -Qu, no root needed) the line goes straight to pacman -Syu, so a retry after an aborted -Syu (an outdated keyring, a declined conflict) never installs against a synced but unupgraded database (a partial upgrade). Otherwise unchanged: pacman -S first, -Syu when the database is stale."
+  }
+ ]
+}
