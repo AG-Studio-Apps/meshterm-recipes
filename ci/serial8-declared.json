@@ -1,0 +1,4 @@
+{
+ "_comment": "Serial 8 = serial 7's data, unchanged: serial 7 reached main but was never published (its CI seeding line ended with an echo the harness's >/dev/null redirected, so every check failed before signing). A changed recipes.json always takes a new serial, so the CI fix ships as 8. No app-visible change against serial 7.",
+ "changes": []
+}

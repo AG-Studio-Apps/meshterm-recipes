@@ -1,9 +1,11 @@
 # Validates recipes.json (the app's own rules, scripts/validate.py) and runs every recipe on a fresh-distro Docker
 # matrix, as root and as a sudo user, asserting each result (scripts/run-recipes.py, each variant's `ci` block).
 #
-# Runs on pull requests, weekly (distro rot: a package renamed or dropped upstream turns this red before a person
-# meets it), on demand, and from publish.yml before anything is signed (workflow_call). No secrets, no write
-# permission; the containers run third-party packages, so the checkout keeps no credentials.
+# Runs weekly (distro rot: a package renamed or dropped upstream turns this red before a person meets it), on demand,
+# and from publish.yml before anything is signed (workflow_call): that run is THE test of a change. A pull request runs
+# the validator only (its declared-changes check), never the distro matrix (James 2026-10-13: "The merge tests are the
+# test", the PR matrix doubled every serial's hour). No secrets, no write permission; the containers run third-party
+# packages, so the checkout keeps no credentials.
 name: Test recipes
 
 on:
@@ -54,6 +56,8 @@ jobs:
   distro:
     name: ${{ matrix.image }} (${{ matrix.mode }})
     needs: validate
+    # Not on a pull request: the merge's publish run is the test (see the header).
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
