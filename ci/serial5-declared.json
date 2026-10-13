@@ -44,7 +44,7 @@
      "fedora"
     ]
    },
-   "reason": "New: Docker on Fedora from Docker's own repository (the repo file written with curl, so dnf 4 and dnf 5 alike): Docker Engine with buildx and the Compose plugin, then the EL line's start and docker group join. Fedora's own Docker packages own the same files and declare no conflict (docker-cli, docker-compose, docker-buildx, moby-engine; podman-docker's /usr/bin/docker), so the installed ones are removed first, by name. Before this, a Fedora host knew no Docker install line, so the app offered only Podman (James 2026-10-13). CI starts from Podman with Fedora's Compose and checks Podman still works."
+   "reason": "New: Docker on Fedora from Docker's own repository (the repo file written with curl, so dnf 4 and dnf 5 alike): Docker Engine with buildx and the Compose plugin, then the EL line's start and docker group join. Fedora's own Docker packages own the same files and declare no conflict (docker-cli, docker-compose, docker-buildx, moby-engine; podman-docker's /usr/bin/docker), so the installed ones are removed by name, but only once Docker's packages resolved and downloaded (dnf --downloadonly): a release Docker's repository does not serve yet, or a network failure, leaves Fedora's packages in place. Before this, a Fedora host knew no Docker install line, so the app offered only Podman (James 2026-10-13). CI starts from Podman with Fedora's Compose and checks Podman and podman compose still work."
   },
   {
    "intent": "engine.podman.install",
@@ -56,7 +56,7 @@
      "arch"
     ]
    },
-   "reason": "New: Podman on Arch with pacman, the Arch Docker line's shape: pacman -S first, -Syu only when the sync database is stale (the app labels it 'may update the system'), and the kernel-updated check that asks for a reboot. Read by meshTerm builds that ask for Podman on these hosts (2.3.0 on); older builds never ask, so nothing changes for them (James 2026-10-13)."
+   "reason": "New: Podman on Arch with pacman, the Arch Docker line's shape: pacman -S first, -Syu only when the sync database is stale (the app labels it 'may update the system'), and the kernel-updated check that asks for a reboot. Read by meshTerm builds that ask for Podman on these hosts (2.3.0 on); older builds never ask, so nothing changes for them (James 2026-10-13). Goes straight to -Syu when updates are pending (pacman -Qu), as the Arch Docker line now does."
   },
   {
    "intent": "engine.podman.install",
@@ -94,7 +94,34 @@
      "apk"
     ]
    },
-   "reason": "New: Podman on Alpine with apk. Read by meshTerm builds that ask for Podman on these hosts (2.3.0 on); older builds never ask, so nothing changes for them (James 2026-10-13)."
+   "reason": "New: Podman on Alpine with apk, and OpenRC's cgroups service added and started (Podman needs it). Read by meshTerm builds that ask for Podman on these hosts (2.3.0 on); older builds never ask, so nothing changes for them (James 2026-10-13)."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "arch"
+    ]
+   },
+   "reason": "Review 2026-10-13: when updates are already pending (pacman -Qu, no root needed) the line goes straight to pacman -Syu, so a retry after an aborted -Syu (an outdated keyring, a declined conflict) never installs against a synced but unupgraded database (a partial upgrade). Otherwise unchanged: pacman -S first, -Syu when the database is stale."
+  },
+  {
+   "intent": "engine.docker.install-script",
+   "selector": {
+    "families": [
+     "unknown"
+    ],
+    "ids": [
+     "manjaro",
+     "endeavouros",
+     "garuda",
+     "cachyos"
+    ]
+   },
+   "reason": "Review 2026-10-13: when updates are already pending (pacman -Qu, no root needed) the line goes straight to pacman -Syu, so a retry after an aborted -Syu (an outdated keyring, a declined conflict) never installs against a synced but unupgraded database (a partial upgrade). Otherwise unchanged: pacman -S first, -Syu when the database is stale."
   }
  ]
 }
