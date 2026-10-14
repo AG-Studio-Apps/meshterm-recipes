@@ -1,0 +1,14 @@
+{
+ "_comment": "Every app-visible change serial 9 makes against serial 8 (scripts/validate.py --declared ci/serial9-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 8>).",
+ "changes": [
+  {
+   "intent": "herdr.install",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "New (James 2026-10-13, meshTerm 2.3.0 herdr on Windows): the install line for a Windows OpenSSH host, in PowerShell 5.1 (the app sends it -EncodedCommand, which runs under cmd or a PowerShell DefaultShell). Downloads herdr's install.ps1 with curl.exe (PowerShell 5.1's own web cmdlets can fail TLS 1.2; install.ps1 needs curl.exe anyway) to the user's own %TEMP%, checks it is a script (it starts [CmdletBinding()]), runs it with -File, removes it, and exits with its code. No administrator: herdr installs per user under %LOCALAPPDATA%. The family is windows only, and an any (POSIX) line never applies to a windows host. CI skip: not in the Linux container matrix; verified by hand on the meshTerm Windows box."
+  }
+ ]
+}
