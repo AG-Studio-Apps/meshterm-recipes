@@ -105,12 +105,29 @@ def check_agent_lines(doc):
                 raise lib.RecipeError(f"{where}: never /tmp (another user can replace the file)")
             if re.search(r"\|\s*(?:sh|bash|zsh)\b", run):
                 raise lib.RecipeError(f"{where}: never pipe a download into a shell")
+            if "windows" in variant["families"]:
+                check_windows_install(where, run, name, variant)
+                continue
             if official:
                 script = f"~/.mt-install-{name}.sh"
                 if f"-o {script}" not in run or not run.endswith(f"&& rm -f {script}"):
                     raise lib.RecipeError(f"{where}: download with -o {script}, run it, and end with && rm -f {script}")
             if intent == "agent.codex.install-official" and "CODEX_NON_INTERACTIVE=1" not in run:
                 raise lib.RecipeError(f"{where}: keeps CODEX_NON_INTERACTIVE=1")
+
+
+def check_windows_install(where, run, name, variant):
+    """A Windows line (meshTerm 2.3.0, PowerShell 5.1, run -EncodedCommand by the app): `windows` only (never beside
+    a POSIX family), the official installer downloaded with curl.exe to the user's own temp folder
+    (`Join-Path $env:TEMP 'mt-install-<name>.ps1'`), run with -File, and removed; never Invoke-Expression / iex / irm."""
+    if variant["families"] != ["windows"]:
+        raise lib.RecipeError(f"{where}: a Windows line is family windows only")
+    script = f"Join-Path $env:TEMP 'mt-install-{name}.ps1'"
+    if script not in run or "curl.exe " not in run or " -o $f " not in run or "-File $f" not in run \
+            or "Remove-Item" not in run:
+        raise lib.RecipeError(f"{where}: download with curl.exe -o $f to {script}, run it with -File $f, remove it")
+    if re.search(r"(?i)invoke-expression|\biex\b|\birm\b|invoke-restmethod", run):
+        raise lib.RecipeError(f"{where}: never Invoke-Expression / iex / irm")
 
 
 def selector_of(variant):
@@ -275,6 +292,8 @@ def self_test():
         doc["intents"][intent] = [dict({"families": ["any"], "run": run, "ci": {"skip": "test"}}, **extra)]
         return json.dumps(doc).encode()
 
+    WIN_OK = ("$f = Join-Path $env:TEMP 'mt-install-herdr.ps1'; curl.exe -fsSL -o $f https://example.com/i.ps1; "
+              "powershell.exe -NoProfile -File $f; $c = $LASTEXITCODE; Remove-Item -Force $f; exit $c")
     official = "curl -fsSL https://example.com/install.sh -o ~/.mt-install-claude.sh && bash ~/.mt-install-claude.sh && rm -f ~/.mt-install-claude.sh"
     codex = "curl -fsSL https://example.com/i.sh -o ~/.mt-install-codex.sh && env CODEX_NON_INTERACTIVE=1 sh ~/.mt-install-codex.sh && rm -f ~/.mt-install-codex.sh"
     bad = {
@@ -300,6 +319,11 @@ def self_test():
         "bool serial": json.dumps(dict(base, serial=True)).encode(),
         "bad date": json.dumps(dict(base, date="2026-13-01")).encode(),
         "duplicate key": good.replace(b'"kind": "host-recipes",', b'"kind": "host-recipes", "kind": "host-recipes",', 1),
+        "windows beside a POSIX family": intent_of("herdr.install", WIN_OK, families=["windows", "apt"]),
+        "windows iex": intent_of("herdr.install", WIN_OK.replace("-File $f;", "-File $f; iex x;"), families=["windows"]),
+        "windows irm": intent_of("herdr.install", WIN_OK + " irm https://example.com", families=["windows"]),
+        "windows not removed": intent_of("herdr.install", WIN_OK.replace("Remove-Item", "Rename-Item"), families=["windows"]),
+        "windows over http": intent_of("herdr.install", WIN_OK.replace("https://", "http://"), families=["windows"]),
         "ci port out of range": variant_of("{{sudo}}ufw allow {{port}}/{{proto}}", ci={"check": "true", "port": 0, "proto": "udp"}),
         "ci without a port": variant_of("{{sudo}}ufw allow {{port}}/{{proto}}", ci={"check": "true", "proto": "udp"}),
         "agent with sudo": intent_of("agent.claude.install-npm", "{{sudo}}npm install -g x"),

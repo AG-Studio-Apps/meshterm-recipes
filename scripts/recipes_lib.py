@@ -25,7 +25,9 @@ PROTOS = ("tcp", "udp")
 GROUPS = ("sudo", "wheel")
 PATH_VALUE = re.compile(r"^/[A-Za-z0-9._/+-]{1,255}\Z")
 # The families the app knows. A variant may name others (ignored by today's apps); see README.
-FAMILIES = {"apt", "dnf", "yum", "apk", "pacman", "zypper", "macos", "unknown", "any"}
+# `windows` (a Windows OpenSSH host, meshTerm 2.3.0): its lines are PowerShell 5.1, and an `any` line (POSIX) never
+# applies to it (`score`).
+FAMILIES = {"apt", "dnf", "yum", "apk", "pacman", "zypper", "macos", "unknown", "any", "windows"}
 
 TOKEN = re.compile(r"^[a-z0-9-]{1,32}\Z")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9]{1,32}\Z")
@@ -332,7 +334,7 @@ def check_covers(doc, previous):
 def score(variant, family, distro_id=None, version=None):
     """How specifically `variant` applies (higher wins), None when it does not (HostRecipeVariant.score)."""
     exact = family in variant["families"]
-    if not exact and "any" not in variant["families"]:
+    if not exact and ("any" not in variant["families"] or family == "windows"):
         return None
     value = 1 if exact else 0
     if "ids" in variant:

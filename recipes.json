@@ -1,8 +1,8 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 8,
-  "date": "2026-10-13",
+  "serial": 9,
+  "date": "2026-10-14",
   "packages": {
     "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
     "caCertificates": {"apt": "ca-certificates", "apk": "ca-certificates"},
@@ -461,7 +461,9 @@
     ],
     "herdr.install": [
       {"families": ["any"], "run": "sh -c 'for i in 1 2 3; do curl -fsSL --compressed --retry 3 https://herdr.dev/install.sh -o ~/.mt-install-herdr.sh && [ \"$(head -c 2 ~/.mt-install-herdr.sh)\" = \"#!\" ] && exit 0; sleep 5; done; rm -f ~/.mt-install-herdr.sh; echo \"The installer download was not a script (the vendor server returned something else): tap again in a minute.\" >&2; exit 1' && sh ~/.mt-install-herdr.sh && rm -f ~/.mt-install-herdr.sh",
-       "ci": {"needs": ["curl", "awk", "sha256sum"], "check": "eval ~$MT_USER/.local/bin/herdr --version", "skipOn": {"debian:13": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:22.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:24.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "fedora:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "rockylinux/rockylinux:9": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "amazonlinux:2023": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "archlinux:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "opensuse/leap:15.6": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20"}}}
+       "ci": {"needs": ["curl", "awk", "sha256sum"], "check": "eval ~$MT_USER/.local/bin/herdr --version", "skipOn": {"debian:13": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:22.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "ubuntu:24.04": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "fedora:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "rockylinux/rockylinux:9": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "amazonlinux:2023": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "archlinux:latest": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20", "opensuse/leap:15.6": "the installers are distribution-neutral: proved on debian:12 and alpine:3.20"}}},
+      {"families": ["windows"], "run": "$f = Join-Path $env:TEMP 'mt-install-herdr.ps1'; $ok = $false; for ($i = 0; $i -lt 3; $i++) { curl.exe -fsSL --retry 3 -o $f https://herdr.dev/install.ps1; if (($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $f)) { $t = [IO.File]::ReadAllText($f).TrimStart([char]0xFEFF).TrimStart(); if ($t.StartsWith('[CmdletBinding') -or $t.StartsWith('#') -or $t.StartsWith('<#') -or $t.StartsWith('param')) { $ok = $true; break } }; Start-Sleep -Seconds 5 }; if (-not $ok) { Remove-Item -Force -ErrorAction SilentlyContinue $f; [Console]::Error.WriteLine('The installer download was not a script (the vendor server returned something else): tap again in a minute.'); exit 1 }; powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $f; $c = $LASTEXITCODE; Remove-Item -Force -ErrorAction SilentlyContinue $f; exit $c",
+       "ci": {"skip": "Windows: PowerShell on a Windows OpenSSH host, not in the Linux container matrix (verified on the meshTerm Windows box)"}}
     ]
   }
 }
