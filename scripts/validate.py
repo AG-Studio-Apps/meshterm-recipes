@@ -128,6 +128,14 @@ def check_windows_install(where, run, name, variant):
         raise lib.RecipeError(f"{where}: download with curl.exe -o $f to {script}, run it with -File $f, remove it")
     if re.search(r"(?i)invoke-expression|\biex\b|\birm\b|invoke-restmethod", run):
         raise lib.RecipeError(f"{where}: never Invoke-Expression / iex / irm")
+    if name == "codex":
+        # Serial 10: OpenAI signs install.ps1 (Authenticode, "OpenAI OpCo, LLC"); the line refuses to run anything
+        # else, and keeps the installer's prompts off as the POSIX line does.
+        if "Get-AuthenticodeSignature -FilePath $f" not in run or "$s.Status -ne 'Valid'" not in run \
+                or "GetNameInfo('SimpleName', $false) -ne 'OpenAI OpCo, LLC'" not in run:
+            raise lib.RecipeError(f"{where}: checks install.ps1's Authenticode signature (Valid, OpenAI OpCo, LLC)")
+        if "$env:CODEX_NON_INTERACTIVE = '1'" not in run:
+            raise lib.RecipeError(f"{where}: keeps $env:CODEX_NON_INTERACTIVE = '1'")
 
 
 def selector_of(variant):
@@ -213,8 +221,18 @@ def git_show(ref, path):
         return None
 
 
+def check_windows_families(doc):
+    """A `windows` variant is family windows ONLY, in every intent (serial 9 follow-up a): its line is PowerShell, so
+    sharing a variant with a POSIX family would hand one of them a line in the wrong language."""
+    for intent, variants in doc["intents"].items():
+        for index, variant in enumerate(variants):
+            if "windows" in variant["families"] and variant["families"] != ["windows"]:
+                raise lib.RecipeError(f"{intent}[{index}]: a Windows line is family windows only")
+
+
 def validate(data, previous=None, need_ci=True):
     doc = lib.load(data)
+    check_windows_families(doc)
     if need_ci:
         check_ci(doc)
         check_agent_lines(doc)
@@ -294,6 +312,11 @@ def self_test():
 
     WIN_OK = ("$f = Join-Path $env:TEMP 'mt-install-herdr.ps1'; curl.exe -fsSL -o $f https://example.com/i.ps1; "
               "powershell.exe -NoProfile -File $f; $c = $LASTEXITCODE; Remove-Item -Force $f; exit $c")
+    WIN_CODEX = ("$f = Join-Path $env:TEMP 'mt-install-codex.ps1'; curl.exe -fsSL -o $f https://example.com/i.ps1; "
+                 "$s = Get-AuthenticodeSignature -FilePath $f; if (($s.Status -ne 'Valid') -or "
+                 "($s.SignerCertificate.GetNameInfo('SimpleName', $false) -ne 'OpenAI OpCo, LLC')) { exit 1 }; "
+                 "$env:CODEX_NON_INTERACTIVE = '1'; powershell.exe -NoProfile -File $f; $c = $LASTEXITCODE; "
+                 "Remove-Item -Force $f; exit $c")
     official = "curl -fsSL https://example.com/install.sh -o ~/.mt-install-claude.sh && bash ~/.mt-install-claude.sh && rm -f ~/.mt-install-claude.sh"
     codex = "curl -fsSL https://example.com/i.sh -o ~/.mt-install-codex.sh && env CODEX_NON_INTERACTIVE=1 sh ~/.mt-install-codex.sh && rm -f ~/.mt-install-codex.sh"
     bad = {
@@ -324,6 +347,13 @@ def self_test():
         "windows irm": intent_of("herdr.install", WIN_OK + " irm https://example.com", families=["windows"]),
         "windows not removed": intent_of("herdr.install", WIN_OK.replace("Remove-Item", "Rename-Item"), families=["windows"]),
         "windows over http": intent_of("herdr.install", WIN_OK.replace("https://", "http://"), families=["windows"]),
+        "windows beside POSIX in any intent": intent_of("tmux.install", "echo x", families=["windows", "any"]),
+        "codex windows unsigned": intent_of("agent.codex.install-official", WIN_CODEX.replace(
+            "$s.Status -ne 'Valid'", "$false"), families=["windows"]),
+        "codex windows any signer": intent_of("agent.codex.install-official", WIN_CODEX.replace(
+            " -ne 'OpenAI OpCo, LLC'", " -eq ''"), families=["windows"]),
+        "codex windows interactive": intent_of("agent.codex.install-official", WIN_CODEX.replace(
+            "$env:CODEX_NON_INTERACTIVE = '1'; ", ""), families=["windows"]),
         "ci port out of range": variant_of("{{sudo}}ufw allow {{port}}/{{proto}}", ci={"check": "true", "port": 0, "proto": "udp"}),
         "ci without a port": variant_of("{{sudo}}ufw allow {{port}}/{{proto}}", ci={"check": "true", "proto": "udp"}),
         "agent with sudo": intent_of("agent.claude.install-npm", "{{sudo}}npm install -g x"),
@@ -343,7 +373,8 @@ def self_test():
             failures += 1
         except lib.RecipeError:
             pass
-    for name, data in {"agent official": intent_of("agent.claude.install-official", official),
+    for name, data in {"codex windows": intent_of("agent.codex.install-official", WIN_CODEX, families=["windows"]),
+                       "agent official": intent_of("agent.claude.install-official", official),
                        "codex official": intent_of("agent.codex.install-official", codex),
                        "agent npm": intent_of("agent.codex.install-npm", 'npm install -g --prefix "$HOME/.local" @openai/codex')}.items():
         try:
@@ -404,6 +435,13 @@ def self_test():
     debian = lib.select(doc, "compose.install-package", "apt", "debian")
     if ubuntu is None or debian is not None:
         print("self-test FAIL: compose.install-package selection")
+        failures += 1
+    # score(): an `any` (POSIX) line never applies to a windows host, a windows line only to one (serial 9 follow-up b).
+    if lib.score({"families": ["any"], "run": "x"}, "windows") is not None \
+            or lib.score({"families": ["windows"], "run": "x"}, "windows") != 1 \
+            or lib.score({"families": ["windows"], "run": "x"}, "apt") is not None \
+            or lib.score({"families": ["any"], "run": "x"}, "apt") != 0:
+        print("self-test FAIL: score()'s windows rules")
         failures += 1
     if lib.render("{{sudo}}usermod -aG docker {{user}}", True, user="-x") is not None:
         print("self-test FAIL: an option-shaped user rendered")
