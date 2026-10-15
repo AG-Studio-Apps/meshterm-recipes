@@ -106,6 +106,8 @@ def check_agent_lines(doc):
             if re.search(r"\|\s*(?:sh|bash|zsh)\b", run):
                 raise lib.RecipeError(f"{where}: never pipe a download into a shell")
             if "windows" in variant["families"]:
+                if not official:
+                    raise lib.RecipeError(f"{where}: only an official installer (or herdr's) has a Windows line")
                 check_windows_install(where, run, name, variant)
                 continue
             if official:
@@ -116,26 +118,57 @@ def check_agent_lines(doc):
                 raise lib.RecipeError(f"{where}: keeps CODEX_NON_INTERACTIVE=1")
 
 
+# Serial 10 (meshTerm review): a Windows installer line is not checked for ingredients but BUILT: it must equal
+# `windows_install_line(<name>)`, so a check moved after the run, commented out or short-circuited, another host or
+# scheme, `curl -k`, dot-sourcing, elevation or an in-memory download can't pass. The vendor URL and the script's
+# first token are allowlisted per installer (measured 2026-10-15).
+WINDOWS_INSTALLERS = {
+    "herdr": ("https://herdr.dev/install.ps1", "[CmdletBinding"),
+    "claude": ("https://claude.ai/install.ps1", "param("),
+    "codex": ("https://chatgpt.com/codex/install.ps1", "[CmdletBinding"),
+    "agy": ("https://antigravity.google/cli/install.ps1", "$ErrorActionPreference"),
+}
+NOT_A_SCRIPT = ("The installer download was not a script (the vendor server returned something else): "
+                "tap again in a minute.")
+# Codex: OpenAI signs install.ps1 (Authenticode). Valid, the exact simple name, and the organisation in the subject,
+# checked BEFORE anything runs; on failure the status and Windows' own message say why (a host missing the root
+# reads UnknownError / NotTrusted, which "not signed by OpenAI" would misstate).
+CODEX_SIGNATURE = ("$s = Get-AuthenticodeSignature -FilePath $f; if (($s.Status -ne 'Valid') -or "
+                   "($null -eq $s.SignerCertificate) -or "
+                   "($s.SignerCertificate.GetNameInfo('SimpleName', $false) -cne 'OpenAI OpCo, LLC') -or "
+                   "(-not $s.SignerCertificate.Subject.Contains('O=\"OpenAI OpCo, LLC\"'))) { "
+                   "Remove-Item -Force -ErrorAction SilentlyContinue $f; [Console]::Error.WriteLine("
+                   "'The Codex installer signature did not check out (' + $s.Status + ': ' + $s.StatusMessage + "
+                   "'), so it was not run.'); exit 1 }; $env:CODEX_NON_INTERACTIVE = '1'; ")
+
+
+def windows_install_line(name):
+    """The one accepted Windows line for installer `name`: curl.exe (https only, redirects too) downloads the vendor's
+    install.ps1 to a fresh, randomly named file in the user's own %TEMP% (3 tries), which must start with the vendor
+    script's first token; codex's signature is checked; then it runs with -File under a process-scoped Bypass, is
+    removed, and its code is the line's."""
+    url, token = WINDOWS_INSTALLERS[name]
+    extra = CODEX_SIGNATURE if name == "codex" else ""
+    return (f"$f = Join-Path $env:TEMP ('mt-install-{name}-' + [guid]::NewGuid().ToString('N') + '.ps1'); "
+            f"$ok = $false; for ($i = 0; $i -lt 3; $i++) {{ curl.exe -fsSL --proto =https --retry 3 -o $f {url}; "
+            "if (($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $f)) { "
+            "$t = [IO.File]::ReadAllText($f).TrimStart([char]0xFEFF).TrimStart(); "
+            f"if ($t.StartsWith('{token}')) {{ $ok = $true; break }} }}; Start-Sleep -Seconds 5 }}; "
+            "if (-not $ok) { Remove-Item -Force -ErrorAction SilentlyContinue $f; "
+            f"[Console]::Error.WriteLine('{NOT_A_SCRIPT}'); exit 1 }}; "
+            f"{extra}powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $f; $c = $LASTEXITCODE; "
+            "Remove-Item -Force -ErrorAction SilentlyContinue $f; exit $c")
+
+
 def check_windows_install(where, run, name, variant):
-    """A Windows line (meshTerm 2.3.0, PowerShell 5.1, run -EncodedCommand by the app): `windows` only (never beside
-    a POSIX family), the official installer downloaded with curl.exe to the user's own temp folder
-    (`Join-Path $env:TEMP 'mt-install-<name>.ps1'`), run with -File, and removed; never Invoke-Expression / iex / irm."""
+    """A Windows install line (meshTerm 2.3.0+, PowerShell 5.1): family windows only, and exactly
+    `windows_install_line(name)` (serial 10: built, not pattern-checked)."""
     if variant["families"] != ["windows"]:
         raise lib.RecipeError(f"{where}: a Windows line is family windows only")
-    script = f"Join-Path $env:TEMP 'mt-install-{name}.ps1'"
-    if script not in run or "curl.exe " not in run or " -o $f " not in run or "-File $f" not in run \
-            or "Remove-Item" not in run:
-        raise lib.RecipeError(f"{where}: download with curl.exe -o $f to {script}, run it with -File $f, remove it")
-    if re.search(r"(?i)invoke-expression|\biex\b|\birm\b|invoke-restmethod", run):
-        raise lib.RecipeError(f"{where}: never Invoke-Expression / iex / irm")
-    if name == "codex":
-        # Serial 10: OpenAI signs install.ps1 (Authenticode, "OpenAI OpCo, LLC"); the line refuses to run anything
-        # else, and keeps the installer's prompts off as the POSIX line does.
-        if "Get-AuthenticodeSignature -FilePath $f" not in run or "$s.Status -ne 'Valid'" not in run \
-                or "GetNameInfo('SimpleName', $false) -ne 'OpenAI OpCo, LLC'" not in run:
-            raise lib.RecipeError(f"{where}: checks install.ps1's Authenticode signature (Valid, OpenAI OpCo, LLC)")
-        if "$env:CODEX_NON_INTERACTIVE = '1'" not in run:
-            raise lib.RecipeError(f"{where}: keeps $env:CODEX_NON_INTERACTIVE = '1'")
+    if name not in WINDOWS_INSTALLERS:
+        raise lib.RecipeError(f"{where}: no Windows installer is allowlisted for {name}")
+    if run != windows_install_line(name):
+        raise lib.RecipeError(f"{where}: a Windows install line must be exactly windows_install_line({name!r})")
 
 
 def selector_of(variant):
@@ -310,13 +343,9 @@ def self_test():
         doc["intents"][intent] = [dict({"families": ["any"], "run": run, "ci": {"skip": "test"}}, **extra)]
         return json.dumps(doc).encode()
 
-    WIN_OK = ("$f = Join-Path $env:TEMP 'mt-install-herdr.ps1'; curl.exe -fsSL -o $f https://example.com/i.ps1; "
-              "powershell.exe -NoProfile -File $f; $c = $LASTEXITCODE; Remove-Item -Force $f; exit $c")
-    WIN_CODEX = ("$f = Join-Path $env:TEMP 'mt-install-codex.ps1'; curl.exe -fsSL -o $f https://example.com/i.ps1; "
-                 "$s = Get-AuthenticodeSignature -FilePath $f; if (($s.Status -ne 'Valid') -or "
-                 "($s.SignerCertificate.GetNameInfo('SimpleName', $false) -ne 'OpenAI OpCo, LLC')) { exit 1 }; "
-                 "$env:CODEX_NON_INTERACTIVE = '1'; powershell.exe -NoProfile -File $f; $c = $LASTEXITCODE; "
-                 "Remove-Item -Force $f; exit $c")
+    WIN_HERDR = windows_install_line("herdr")
+    WIN_CODEX = windows_install_line("codex")
+    run_at = "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $f;"
     official = "curl -fsSL https://example.com/install.sh -o ~/.mt-install-claude.sh && bash ~/.mt-install-claude.sh && rm -f ~/.mt-install-claude.sh"
     codex = "curl -fsSL https://example.com/i.sh -o ~/.mt-install-codex.sh && env CODEX_NON_INTERACTIVE=1 sh ~/.mt-install-codex.sh && rm -f ~/.mt-install-codex.sh"
     bad = {
@@ -342,18 +371,37 @@ def self_test():
         "bool serial": json.dumps(dict(base, serial=True)).encode(),
         "bad date": json.dumps(dict(base, date="2026-13-01")).encode(),
         "duplicate key": good.replace(b'"kind": "host-recipes",', b'"kind": "host-recipes", "kind": "host-recipes",', 1),
-        "windows beside a POSIX family": intent_of("herdr.install", WIN_OK, families=["windows", "apt"]),
-        "windows iex": intent_of("herdr.install", WIN_OK.replace("-File $f;", "-File $f; iex x;"), families=["windows"]),
-        "windows irm": intent_of("herdr.install", WIN_OK + " irm https://example.com", families=["windows"]),
-        "windows not removed": intent_of("herdr.install", WIN_OK.replace("Remove-Item", "Rename-Item"), families=["windows"]),
-        "windows over http": intent_of("herdr.install", WIN_OK.replace("https://", "http://"), families=["windows"]),
+        "windows beside a POSIX family": intent_of("herdr.install", WIN_HERDR, families=["windows", "apt"]),
         "windows beside POSIX in any intent": intent_of("tmux.install", "echo x", families=["windows", "any"]),
-        "codex windows unsigned": intent_of("agent.codex.install-official", WIN_CODEX.replace(
-            "$s.Status -ne 'Valid'", "$false"), families=["windows"]),
-        "codex windows any signer": intent_of("agent.codex.install-official", WIN_CODEX.replace(
-            " -ne 'OpenAI OpCo, LLC'", " -eq ''"), families=["windows"]),
-        "codex windows interactive": intent_of("agent.codex.install-official", WIN_CODEX.replace(
+        "windows iex": intent_of("herdr.install", WIN_HERDR.replace(run_at, run_at + " iex x;"), families=["windows"]),
+        "windows not removed": intent_of("herdr.install", WIN_HERDR.replace("Remove-Item", "Rename-Item"), families=["windows"]),
+        "windows over http": intent_of("herdr.install", WIN_HERDR.replace("https://", "http://"), families=["windows"]),
+        "windows scheme-less URL": intent_of("herdr.install", WIN_HERDR.replace("https://herdr.dev", "herdr.dev"), families=["windows"]),
+        "windows curl -k": intent_of("herdr.install", WIN_HERDR.replace("curl.exe -fsSL", "curl.exe -k -fsSL"), families=["windows"]),
+        "windows without --proto": intent_of("herdr.install", WIN_HERDR.replace("--proto =https ", ""), families=["windows"]),
+        "windows another host": intent_of("herdr.install", WIN_HERDR.replace("herdr.dev", "herdr.example"), families=["windows"]),
+        "windows fixed temp name": intent_of("herdr.install", WIN_HERDR.replace(
+            "('mt-install-herdr-' + [guid]::NewGuid().ToString('N') + '.ps1')", "'mt-install-herdr.ps1'"), families=["windows"]),
+        "windows dot-sourced": intent_of("herdr.install", WIN_HERDR.replace(run_at, ". $f; # " + run_at), families=["windows"]),
+        "windows elevated": intent_of("herdr.install", WIN_HERDR.replace(
+            run_at, "Start-Process powershell.exe -Verb RunAs -ArgumentList '-File', $f;"), families=["windows"]),
+        "windows in-memory": intent_of("herdr.install", WIN_HERDR.replace(run_at, "& ([scriptblock]::Create((New-Object "
+            "Net.WebClient).DownloadString('https://herdr.dev/install.ps1')));"), families=["windows"]),
+        "windows looser first token": intent_of("herdr.install", WIN_HERDR.replace(
+            "$t.StartsWith('[CmdletBinding')", "$t.StartsWith('[CmdletBinding') -or $t.StartsWith('#')"), families=["windows"]),
+        "codex signature after the run": intent_of("agent.codex.install-official", WIN_CODEX.replace(CODEX_SIGNATURE, "")
+            .replace("exit $c", CODEX_SIGNATURE + "exit $c"), families=["windows"]),
+        "codex signature commented out": intent_of("agent.codex.install-official", WIN_CODEX.replace(
+            "$s = Get-AuthenticodeSignature", "# $s = Get-AuthenticodeSignature"), families=["windows"]),
+        "codex signature short-circuited": intent_of("agent.codex.install-official", WIN_CODEX.replace(
+            "if (($s.Status -ne 'Valid')", "if ($false -and ($s.Status -ne 'Valid')"), families=["windows"]),
+        "codex signer case-insensitive": intent_of("agent.codex.install-official", WIN_CODEX.replace(" -cne ", " -ne "),
+                                                   families=["windows"]),
+        "codex interactive": intent_of("agent.codex.install-official", WIN_CODEX.replace(
             "$env:CODEX_NON_INTERACTIVE = '1'; ", ""), families=["windows"]),
+        "claude line under codex": intent_of("agent.codex.install-official", windows_install_line("claude"),
+                                             families=["windows"]),
+        "a Windows installer nobody allowlisted": intent_of("agent.claude.install-npm", "x", families=["windows"]),
         "ci port out of range": variant_of("{{sudo}}ufw allow {{port}}/{{proto}}", ci={"check": "true", "port": 0, "proto": "udp"}),
         "ci without a port": variant_of("{{sudo}}ufw allow {{port}}/{{proto}}", ci={"check": "true", "proto": "udp"}),
         "agent with sudo": intent_of("agent.claude.install-npm", "{{sudo}}npm install -g x"),
@@ -374,6 +422,7 @@ def self_test():
         except lib.RecipeError:
             pass
     for name, data in {"codex windows": intent_of("agent.codex.install-official", WIN_CODEX, families=["windows"]),
+                       "herdr windows": intent_of("herdr.install", WIN_HERDR, families=["windows"]),
                        "agent official": intent_of("agent.claude.install-official", official),
                        "codex official": intent_of("agent.codex.install-official", codex),
                        "agent npm": intent_of("agent.codex.install-npm", 'npm install -g --prefix "$HOME/.local" @openai/codex')}.items():
