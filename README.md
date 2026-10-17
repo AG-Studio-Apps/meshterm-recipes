@@ -105,9 +105,9 @@ foreground, at most every 12 hours (1 hour after a failure).
    python3 scripts/run-recipes.py --list                          # what would run, without Docker
    ```
 
-6. Open a pull request. `Test recipes` validates against `main` and runs every recipe on debian:12, ubuntu:22.04,
-   ubuntu:24.04, fedora:latest, rockylinux/rockylinux:9 and alpine:3.20, as root and as a sudo user, in fresh containers.
-7. Merge. `Publish recipes` runs the matrix again, then waits for the `recipes-signing` approval. Read the job
+6. Open a pull request for the record. It starts no workflow: the publish run is the test.
+7. Merge. `Publish recipes` validates against the main it replaces (incl. the declared-changes check), runs every
+   recipe on the fresh-distro matrix as root and as a sudo user, then waits for the `recipes-signing` approval. Read the job
    summary (the diff since the deployed commit; a banner if the pipeline itself changed), approve, and the signed
    pair is deployed and smoke-tested. Devices pick it up within 12 hours of their next launch.
 

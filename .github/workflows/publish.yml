@@ -22,7 +22,7 @@
 #   deploy  actions/deploy-pages.
 #   smoke   fetches the live pair with a cache-busting query and verifies it again.
 #
-# Pull requests run test-recipes.yml on their own; this workflow runs on main only. No pull_request_target, ever.
+# Pull requests start no workflow; this one runs on main only and is the test. No pull_request_target, ever.
 # Every action is pinned by commit SHA.
 #
 # Per-schema path (meshTerm docs/recipes-v3-plan.md 2.1(c)): the site serves the same bytes and the same signature at

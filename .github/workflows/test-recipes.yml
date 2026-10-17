@@ -2,15 +2,13 @@
 # matrix, as root and as a sudo user, asserting each result (scripts/run-recipes.py, each variant's `ci` block).
 #
 # Runs weekly (distro rot: a package renamed or dropped upstream turns this red before a person meets it), on demand,
-# and from publish.yml before anything is signed (workflow_call): that run is THE test of a change. A pull request runs
-# the validator only (its declared-changes check), never the distro matrix (James 2026-10-13: "The merge tests are the
-# test", the PR matrix doubled every serial's hour). No secrets, no write permission; the containers run third-party
+# and from publish.yml before anything is signed (workflow_call): that run is THE test of a change, including the
+# declared-changes check against the main it replaces. Pull requests start no run at all (James 2026-10-13: "The merge
+# tests are the test"; 2026-10-17: no separate test run, the publish run duplicates it). No secrets, no write permission; the containers run third-party
 # packages, so the checkout keeps no credentials.
 name: Test recipes
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "0 5 * * 1"  # Mondays 05:00 UTC
@@ -32,22 +30,30 @@ jobs:
       - name: Self-test the validator
         run: python3 scripts/validate.py --self-test
       - name: Validate recipes.json against main
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = pull_request ]; then
-            python3 scripts/validate.py --previous-ref "origin/${GITHUB_BASE_REF}"
-            # A pull request that raises the serial lists every app-visible change it makes in
+          # From publish.yml (a push to main): check against the main this push replaced.
+          base=""
+          if [ "${GITHUB_EVENT_NAME}" = push ]; then
+            base="${BEFORE_SHA}"
+            case "$base" in ""|0000000000000000000000000000000000000000) base=$(git rev-parse -q --verify HEAD^1 || true) ;; esac
+          fi
+          if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            python3 scripts/validate.py --previous-ref "$base"
+            # A change that raises the serial lists every app-visible change it makes in
             # ci/serial<N>-declared.json (scripts/validate.py --declared); one that keeps the serial changes no data.
             serial() { python3 -c 'import json, sys; print(json.load(sys.stdin)["serial"])'; }
             new=$(serial < recipes.json)
-            old=$(git show "origin/${GITHUB_BASE_REF}:recipes.json" | serial)
+            old=$(git show "${base}:recipes.json" | serial)
             if [ "$new" != "$old" ]; then
               if [ ! -f "ci/serial${new}-declared.json" ]; then
                 echo "::error::serial ${old} -> ${new}: list the changes in ci/serial${new}-declared.json"
                 exit 1
               fi
               python3 scripts/validate.py --declared "ci/serial${new}-declared.json" \
-                --baseline ci/serial3-baseline.json --previous-ref "origin/${GITHUB_BASE_REF}"
+                --baseline ci/serial3-baseline.json --previous-ref "$base"
             fi
           else
             python3 scripts/validate.py
@@ -56,8 +62,6 @@ jobs:
   distro:
     name: ${{ matrix.image }} (${{ matrix.mode }})
     needs: validate
-    # Not on a pull request: the merge's publish run is the test (see the header).
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
