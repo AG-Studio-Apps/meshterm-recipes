@@ -1,0 +1,41 @@
+{
+ "_comment": "Every app-visible change serial 10 makes against serial 9 (scripts/validate.py --declared ci/serial10-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 9>).",
+ "changes": [
+  {
+   "intent": "agent.claude.install-official",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "New (meshTerm 2.3.1, Agents setup on Windows hosts, docs/windows-signin-and-shell-plan.md 4.2): the official Claude Code installer for a Windows OpenSSH host, in PowerShell 5.1 (the app runs it through its streamed Windows install wrapper). curl.exe downloads https://claude.ai/install.ps1 to a fresh, randomly named file in the user's own %TEMP% (curl --proto =https, so redirects stay https too) (3 tries; it must start param( as the vendor script does), runs it with -File under a process-scoped Bypass, removes it, exits with its code. Per user (claude.exe install puts the launcher in the profile and the user PATH), no administrator. The family is windows only, and an any (POSIX) line never applies to a windows host. CI skip: not in the Linux container matrix; the gate is James's in-app install test from a TestFlight build carrying this file as a draft."
+  },
+  {
+   "intent": "agent.codex.install-official",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "New (meshTerm 2.3.1, Agents setup on Windows hosts): the official Codex installer for a Windows OpenSSH host. curl.exe downloads https://chatgpt.com/codex/install.ps1 to a fresh, randomly named file in the user's own %TEMP% (curl --proto =https, so redirects stay https too) (3 tries; it must start [CmdletBinding), and it runs only when Get-AuthenticodeSignature says Valid, the signer's simple name is exactly OpenAI OpCo, LLC and its subject names that organisation (checked before anything runs; a failure prints the status and Windows' message) (measured on the meshTerm Windows box 2026-10-15; a tampered copy reads NotSigned). CODEX_NON_INTERACTIVE=1 keeps the installer's prompts off, as the POSIX line does. Per user, no administrator. The family is windows only, and an any (POSIX) line never applies to a windows host. CI skip: not in the Linux container matrix; the gate is James's in-app install test from a TestFlight build carrying this file as a draft."
+  },
+  {
+   "intent": "agent.agy.install-official",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "New (meshTerm 2.3.1, Agents setup on Windows hosts): the official Antigravity CLI installer for a Windows OpenSSH host. curl.exe downloads https://antigravity.google/cli/install.ps1 to a fresh, randomly named file in the user's own %TEMP% (curl --proto =https, so redirects stay https too) (3 tries; it must start $ErrorActionPreference as the vendor script does), runs it with -File, removes it, exits with its code. Per user (%LOCALAPPDATA%\\agy\\bin), no administrator; the script checks the binary's SHA-512 itself. The family is windows only, and an any (POSIX) line never applies to a windows host. CI skip: not in the Linux container matrix; the gate is James's in-app install test from a TestFlight build carrying this file as a draft."
+  },
+  {
+   "intent": "herdr.install",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "Changed (meshTerm review of serial 10): the published serial-9 Windows line rebuilt from the same template as the agents' lines: a fresh, randomly named file in %TEMP% instead of the fixed mt-install-herdr.ps1 (another account sharing TEMP could swap a fixed name between download and run), curl --proto =https, and the exact first token [CmdletBinding (herdr's install.ps1 starts [CmdletBinding()]; the looser # / <# / param alternatives are gone). Every Windows install line must now EQUAL scripts/validate.py's windows_install_line(<name>). Needs the same in-app Set Up herdr test on Windows before publication."
+  }
+ ]
+}

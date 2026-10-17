@@ -98,6 +98,22 @@
      "os": {"family": "apt"}, "pick": "bundled-any"},
     {"variants": [{"families": ["any"], "run": "any"}, {"families": ["apt"], "run": "{{sudo}}x {{later}}"}],
      "bundled": [{"families": ["any"], "run": "bundled-any"}],
-     "os": {"family": "dnf"}, "pick": "any"}
+     "os": {"family": "dnf"}, "pick": "any"},
+    {"variants": [{"families": ["any"], "run": "posix"}],
+     "bundled": [],
+     "os": {"family": "windows", "id": "windows"}, "pick": null,
+     "why": "an any (POSIX) line never applies to a windows host"},
+    {"variants": [{"families": ["any"], "run": "posix"}, {"families": ["windows"], "run": "win"}],
+     "bundled": [],
+     "os": {"family": "windows", "id": "windows"}, "pick": "win",
+     "why": "a windows host takes its own line"},
+    {"variants": [{"families": ["windows"], "run": "win"}, {"families": ["any"], "run": "posix"}],
+     "bundled": [],
+     "os": {"family": "apt", "id": "debian"}, "pick": "posix",
+     "why": "a windows line never applies to a POSIX host"},
+    {"variants": [{"families": ["windows"], "run": "win"}],
+     "bundled": [],
+     "os": {"family": "unknown"}, "pick": null,
+     "why": "a host of unknown family never takes a windows line"}
   ]
 }
