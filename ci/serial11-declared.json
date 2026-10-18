@@ -1,0 +1,41 @@
+{
+ "_comment": "Every app-visible change serial 11 makes against serial 10 (scripts/validate.py --declared ci/serial11-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 10>).",
+ "changes": [
+  {
+   "intent": "agent.claude.install-official",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "Changed (serial 10 Opus review follow-up): use -LiteralPath for every Remove-Item on the downloaded installer ($f), so wildcard characters in the temporary path are treated literally. Every other byte of the Windows install line is unchanged."
+  },
+  {
+   "intent": "agent.codex.install-official",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "Changed (serial 10 Opus review follow-up): use -LiteralPath for every Remove-Item on the downloaded installer ($f), so wildcard characters in the temporary path are treated literally. Also replace Get-AuthenticodeSignature -FilePath with -LiteralPath for the same file. Every other byte of the Windows install line is unchanged."
+  },
+  {
+   "intent": "agent.agy.install-official",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "Changed (serial 10 Opus review follow-up): use -LiteralPath for every Remove-Item on the downloaded installer ($f), so wildcard characters in the temporary path are treated literally. Every other byte of the Windows install line is unchanged."
+  },
+  {
+   "intent": "herdr.install",
+   "selector": {
+    "families": [
+     "windows"
+    ]
+   },
+   "reason": "Changed (serial 10 Opus review follow-up): use -LiteralPath for every Remove-Item on the downloaded installer ($f), so wildcard characters in the temporary path are treated literally. Every other byte of the Windows install line is unchanged."
+  }
+ ]
+}

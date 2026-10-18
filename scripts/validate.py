@@ -128,16 +128,22 @@ WINDOWS_INSTALLERS = {
     "codex": ("https://chatgpt.com/codex/install.ps1", "[CmdletBinding"),
     "agy": ("https://antigravity.google/cli/install.ps1", "$ErrorActionPreference"),
 }
+WINDOWS_INSTALL_INTENTS = {
+    "herdr.install",
+    "agent.claude.install-official",
+    "agent.codex.install-official",
+    "agent.agy.install-official",
+}
 NOT_A_SCRIPT = ("The installer download was not a script (the vendor server returned something else): "
                 "tap again in a minute.")
 # Codex: OpenAI signs install.ps1 (Authenticode). Valid, the exact simple name, and the organisation in the subject,
 # checked BEFORE anything runs; on failure the status and Windows' own message say why (a host missing the root
 # reads UnknownError / NotTrusted, which "not signed by OpenAI" would misstate).
-CODEX_SIGNATURE = ("$s = Get-AuthenticodeSignature -FilePath $f; if (($s.Status -ne 'Valid') -or "
+CODEX_SIGNATURE = ("$s = Get-AuthenticodeSignature -LiteralPath $f; if (($s.Status -ne 'Valid') -or "
                    "($null -eq $s.SignerCertificate) -or "
                    "($s.SignerCertificate.GetNameInfo('SimpleName', $false) -cne 'OpenAI OpCo, LLC') -or "
                    "(-not $s.SignerCertificate.Subject.Contains('O=\"OpenAI OpCo, LLC\"'))) { "
-                   "Remove-Item -Force -ErrorAction SilentlyContinue $f; [Console]::Error.WriteLine("
+                   "Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $f; [Console]::Error.WriteLine("
                    "'The Codex installer signature did not check out (' + $s.Status + ': ' + $s.StatusMessage + "
                    "'), so it was not run.'); exit 1 }; $env:CODEX_NON_INTERACTIVE = '1'; ")
 
@@ -154,10 +160,10 @@ def windows_install_line(name):
             "if (($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $f)) { "
             "$t = [IO.File]::ReadAllText($f).TrimStart([char]0xFEFF).TrimStart(); "
             f"if ($t.StartsWith('{token}')) {{ $ok = $true; break }} }}; Start-Sleep -Seconds 5 }}; "
-            "if (-not $ok) { Remove-Item -Force -ErrorAction SilentlyContinue $f; "
+            "if (-not $ok) { Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $f; "
             f"[Console]::Error.WriteLine('{NOT_A_SCRIPT}'); exit 1 }}; "
             f"{extra}powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $f; $c = $LASTEXITCODE; "
-            "Remove-Item -Force -ErrorAction SilentlyContinue $f; exit $c")
+            "Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $f; exit $c")
 
 
 def check_windows_install(where, run, name, variant):
@@ -256,11 +262,16 @@ def git_show(ref, path):
 
 def check_windows_families(doc):
     """A `windows` variant is family windows ONLY, in every intent (serial 9 follow-up a): its line is PowerShell, so
-    sharing a variant with a POSIX family would hand one of them a line in the wrong language."""
+    sharing a variant with a POSIX family would hand one of them a line in the wrong language. Serial 11: only the
+    explicitly allowlisted install intents may have Windows variants."""
     for intent, variants in doc["intents"].items():
         for index, variant in enumerate(variants):
-            if "windows" in variant["families"] and variant["families"] != ["windows"]:
+            if "windows" not in variant["families"]:
+                continue
+            if variant["families"] != ["windows"]:
                 raise lib.RecipeError(f"{intent}[{index}]: a Windows line is family windows only")
+            if intent not in WINDOWS_INSTALL_INTENTS:
+                raise lib.RecipeError(f"{intent}[{index}]: no Windows installer is allowlisted for this intent")
 
 
 def validate(data, previous=None, need_ci=True):
@@ -373,8 +384,18 @@ def self_test():
         "duplicate key": good.replace(b'"kind": "host-recipes",', b'"kind": "host-recipes", "kind": "host-recipes",', 1),
         "windows beside a POSIX family": intent_of("herdr.install", WIN_HERDR, families=["windows", "apt"]),
         "windows beside POSIX in any intent": intent_of("tmux.install", "echo x", families=["windows", "any"]),
+        "windows on a non-agent intent": intent_of("tmux.install", WIN_HERDR, families=["windows"]),
+        "windows on an unknown intent": intent_of("x.y", WIN_HERDR, families=["windows"]),
+        "windows on an unknown official agent": intent_of("agent.other.install-official", WIN_HERDR,
+                                                          families=["windows"]),
+        "windows on a lookalike official intent": intent_of("agent.claude.extra.install-official",
+            windows_install_line("claude"), families=["windows"]),
         "windows iex": intent_of("herdr.install", WIN_HERDR.replace(run_at, run_at + " iex x;"), families=["windows"]),
         "windows not removed": intent_of("herdr.install", WIN_HERDR.replace("Remove-Item", "Rename-Item"), families=["windows"]),
+        "windows removal without LiteralPath": intent_of("herdr.install", WIN_HERDR.replace("-LiteralPath $f;", "$f;"),
+                                                         families=["windows"]),
+        "codex signature without LiteralPath": intent_of("agent.codex.install-official", WIN_CODEX.replace(
+            "Get-AuthenticodeSignature -LiteralPath", "Get-AuthenticodeSignature -FilePath"), families=["windows"]),
         "windows over http": intent_of("herdr.install", WIN_HERDR.replace("https://", "http://"), families=["windows"]),
         "windows scheme-less URL": intent_of("herdr.install", WIN_HERDR.replace("https://herdr.dev", "herdr.dev"), families=["windows"]),
         "windows curl -k": intent_of("herdr.install", WIN_HERDR.replace("curl.exe -fsSL", "curl.exe -k -fsSL"), families=["windows"]),
@@ -423,6 +444,10 @@ def self_test():
             pass
     for name, data in {"codex windows": intent_of("agent.codex.install-official", WIN_CODEX, families=["windows"]),
                        "herdr windows": intent_of("herdr.install", WIN_HERDR, families=["windows"]),
+                       "claude windows": intent_of("agent.claude.install-official", windows_install_line("claude"),
+                                                    families=["windows"]),
+                       "agy windows": intent_of("agent.agy.install-official", windows_install_line("agy"),
+                                                 families=["windows"]),
                        "agent official": intent_of("agent.claude.install-official", official),
                        "codex official": intent_of("agent.codex.install-official", codex),
                        "agent npm": intent_of("agent.codex.install-npm", 'npm install -g --prefix "$HOME/.local" @openai/codex')}.items():
