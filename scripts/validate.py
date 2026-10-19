@@ -373,6 +373,9 @@ def run_format_cases():
         if got != case["out"]:
             print(f"self-test FAIL: render {case['run']!r} {case['values']!r}: {got!r}, expected {case['out']!r}")
             failures += 1
+    if cases.get("familyRoots") != sorted(lib.ID_LIKE_FAMILY_ROOTS):
+        print(f"self-test FAIL: familyRoots {cases.get('familyRoots')!r} is not recipes_lib.ID_LIKE_FAMILY_ROOTS")
+        failures += 1
     for case in cases["selection"]:
         top = {"idLike": case["idLike"]} if "idLike" in case else None
         doc = lib.load(file_with("x.y", case["variants"], top, case.get("otherIds")))

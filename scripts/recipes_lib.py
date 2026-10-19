@@ -39,6 +39,13 @@ MAX_ID_LIKE = 16
 # any variant's `ids`, never inherits (docs/container-idlike-alpine-plan.md 9.2). Passed to `parent` explicitly.
 CONTAINERS_CLASSIFIER_IDS = ("ubuntu", "debian", "raspbian", "linuxmint", "pop", "fedora", "rhel", "centos", "rocky",
                              "almalinux", "alpine")
+# The ID_LIKE family roots (HostRecipeDocument.idLikeFamilyRoots, the same list): os-release ID_LIKE values that name a
+# distribution FAMILY a derivative is built on, not a derivative. While resolving a parent, a root that is not on the
+# document's `idLike` allowlist is RECOGNISED-BUT-EXCLUDED: the walk stops there and the host gets no parent
+# (`ID_LIKE="rhel centos fedora"` stays generic). Every other token off the allowlist (a named derivative such as
+# linuxmint, or an id nobody recognises) is skipped. ci/format-cases.json's `familyRoots` pins both twins to it.
+ID_LIKE_FAMILY_ROOTS = frozenset({"alpine", "arch", "centos", "debian", "fedora", "gentoo", "mandriva", "opensuse",
+                                  "rhel", "slackware", "suse", "ubuntu"})
 PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
 INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\Z")
@@ -351,9 +358,12 @@ def named_ids(doc):
 
 def parent(doc, distro_id, id_like, classifier_ids=()):
     """The ONE parent a host inherits recipe lines from (HostRecipeDocument.parent), None for none: never for a
-    distro the document or the app's classifier (`classifier_ids`, e.g. CONTAINERS_CLASSIFIER_IDS) names; otherwise
-    the first ID_LIKE token on the document's `idLike` allowlist (tokens off the list are skipped). Resolve it from
-    the document IN USE and pass the same parent to the bundled fallback, so a hosted kill switch also holds there."""
+    distro the document or the app's classifier (`classifier_ids`, e.g. CONTAINERS_CLASSIFIER_IDS) names. Otherwise
+    the ID_LIKE tokens are walked in order (the host's own id skipped): a token on the document's `idLike` allowlist
+    is the parent; a family root off it (ID_LIKE_FAMILY_ROOTS: rhel, centos, suse, ...) stops the walk with no
+    parent; any other token (a named derivative such as linuxmint, or an unrecognised id) is skipped. So
+    `linuxmint ubuntu` -> ubuntu, `rhel centos fedora` -> None. Resolve it from the document IN USE and pass the
+    same parent to the bundled fallback, so a hosted kill switch also holds there."""
     allowed = doc.get("idLike") or []
     if not allowed or not id_like:
         return None
@@ -362,8 +372,12 @@ def parent(doc, distro_id, id_like, classifier_ids=()):
         return None
     for token in id_like:
         token = token.lower()
-        if token != distro_id and token in allowed:
+        if token == distro_id:
+            continue
+        if token in allowed:
             return token
+        if token in ID_LIKE_FAMILY_ROOTS:
+            return None
     return None
 
 

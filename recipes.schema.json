@@ -13,7 +13,7 @@
     "idLike": {
       "type": "array", "maxItems": 16, "uniqueItems": true,
       "items": {"type": "string", "pattern": "^[a-z0-9._-]{1,64}$"},
-      "description": "meshTerm 2.3.2+ (older apps ignore it): the parents an unnamed derivative may inherit lines from through os-release ID_LIKE. Absent or empty: inheritance off. A distro named by any variant's ids (or the app's classifier) never inherits; otherwise the first ID_LIKE token on this list is the parent, and an ids line naming it (without versions) applies between an id match and a version range."
+      "description": "meshTerm 2.3.2+ (older apps ignore it): the parents an unnamed derivative may inherit lines from through os-release ID_LIKE. Absent or empty: inheritance off. A distro named by any variant's ids (or the app's classifier) never inherits; otherwise ID_LIKE is walked in order: a token on this list is the parent, a family root off it (rhel, centos, suse, ...) stops with no parent, any other token is skipped; and an ids line naming it (without versions) applies between an id match and a version range."
     },
     "packages": {
       "type": "object",
