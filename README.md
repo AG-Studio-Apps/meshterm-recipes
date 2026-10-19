@@ -98,6 +98,11 @@ foreground, at most every 12 hours (1 hour after a failure).
   `{"named": "<id>"}` for an id `compat/distros.json` lists with an `idLike` (classifier ids aside), `{"unnamed": "<id>"}`
   for one that is no longer named (it starts inheriting), and a change to `idLike` itself is declared as
   `{"kind": "idLike"}`. From serial 12 a `--declared` run without `compat/distros.json` (or `--distros`) FAILS.
+  Engine-side guard (in the app, not the data): meshTerm asks `recipes_lib.SYSTEMD_INHERITANCE`
+  (`engine.docker.rootless-prepare`) WITHOUT the host's ID_LIKE unless its probe saw systemd, so Devuan never gets
+  the inherited apt preparation (it installs `dbus-user-session`, which Devuan 6 has no candidate for).
+  `run-recipes.py` mirrors it for an image row with `"systemd": false`. The sudo recipes' `{{group}}` follows the
+  family the line was selected by (a Fedora derivative on the dnf line: `wheel`), as the variant's `ci.group` does.
 - **admin** (optional): needs an administrator even without `{{sudo}}` (Docker's install script, which asks for
   sudo itself).
 - **packages**: package id -> family -> name, for `packages.install`. A family with no entry needs nothing.

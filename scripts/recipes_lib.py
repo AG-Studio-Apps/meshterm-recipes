@@ -60,6 +60,12 @@ ID_LIKE_FAMILY_ROOTS = frozenset({"alpine", "arch", "centos", "debian", "fedora"
 # parent is never passed, whatever the file's `idLike` says.
 ID_LIKE_INTENTS = ("ca-certificates.install", "compose.*", "engine.*", "git.install", "podman.*", "sudo.grant",
                    "sudo.install")
+# meshTerm ContainerHostFixes.systemdInheritance (the Engine-side guard, not data): the Containers intents whose
+# INHERITED lines assume systemd. The app asks them WITHOUT the host's ID_LIKE unless its probe saw systemd, so a
+# Devuan host keeps today's lines there (the apt engine.docker.rootless-prepare line installs dbus-user-session, which
+# Devuan 6 has no candidate for, measured 2026-10-19). run-recipes.py does the same for an image row with
+# "systemd": false.
+SYSTEMD_INHERITANCE = ("engine.docker.rootless-prepare",)
 PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
 INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\Z")

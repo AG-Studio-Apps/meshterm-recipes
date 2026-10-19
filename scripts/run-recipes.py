@@ -135,7 +135,11 @@ def plan(doc, matrix, args):
                     continue
                 # Only the intents meshTerm asks with the ID_LIKE parent (lib.ID_LIKE_INTENTS) get it, and with it
                 # the parent's family on an `unknown` pass (meshTerm 2.3.2's Containers recipe OS, lib.recipe_os).
-                selected, parent, inherited = lib.recipe_os(doc, intent, family, distro_id, id_like,
+                # An image with no systemd (`"systemd": false`, Devuan) asks lib.SYSTEMD_INHERITANCE without its
+                # ID_LIKE, as the app does (ContainerHostFixes.systemdInheritance): never the inherited apt
+                # rootless preparation, which needs dbus-user-session.
+                tokens = [] if entry.get("systemd") is False and intent in lib.SYSTEMD_INHERITANCE else id_like
+                selected, parent, inherited = lib.recipe_os(doc, intent, family, distro_id, tokens,
                                                             lib.CONTAINERS_CLASSIFIER_IDS,
                                                             lib.CONTAINERS_PARENT_FAMILIES)
                 variant = lib.select(doc, intent, selected, distro_id, version_id, parent_id=parent,
@@ -243,6 +247,28 @@ def self_test():
         got = parse_os_release(text)
         if got != want:
             print(f"self-test FAIL: parse_os_release({text!r}): {got!r}, expected {want!r}")
+            failures += 1
+    # The Containers recipe OS with a draft idLike: a Fedora derivative's sudo lines render `wheel` (the dnf line's
+    # ci.group), and an image row without systemd (Devuan) never gets the inherited apt rootless preparation.
+    with open(os.path.join(ROOT, "recipes.json"), "rb") as handle:
+        raw = json.loads(handle.read())
+    raw["idLike"] = ["arch", "debian", "ubuntu", "fedora"]
+    doc = lib.load(json.dumps(raw).encode())
+    args = argparse.Namespace(image=None, intent=None, mode=None, list=True)
+
+    def cases(entry):
+        return [c for c in plan(doc, {"images": [dict(entry, families=["unknown"])]}, args) if c["command"]]
+
+    grant = [c["command"] for c in cases({"image": "t/ultramarine", "id": "ultramarine", "idLike": ["fedora"]})
+             if c["intent"] in ("sudo.grant", "sudo.install")]
+    if not grant or not all("-aG wheel " in c and "-aG sudo " not in c for c in grant):
+        print(f"self-test FAIL: a fedora-parented host's sudo lines: {grant!r}")
+        failures += 1
+    for systemd, want in [(True, True), (False, False)]:
+        got = any(c["intent"] == "engine.docker.rootless-prepare" and "dbus-user-session" in c["command"]
+                  for c in cases({"image": "t/devuan", "id": "devuan", "idLike": ["debian"], "systemd": systemd}))
+        if got != want:
+            print(f"self-test FAIL: devuan systemd={systemd}: apt rootless preparation {got}, expected {want}")
             failures += 1
     print("self-test:", "OK" if not failures else f"{failures} FAILED")
     return 1 if failures else 0

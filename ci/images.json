@@ -1,5 +1,5 @@
 {
-  "_comment": "The fresh-distro matrix scripts/run-recipes.py runs every recipe on. `families`: the recipe families tested on the image (its own, plus `unknown` for the run-time-detecting lines and `any` for init-system lines). Keep the image list in step with .github/workflows/test-recipes.yml. `suMode`: also run the variants marked `ci.su` in the su -c form (the app's form for a host with no sudo), from the user's login shell.",
+  "_comment": "The fresh-distro matrix scripts/run-recipes.py runs every recipe on. `families`: the recipe families tested on the image (its own, plus `unknown` for the run-time-detecting lines and `any` for init-system lines). Keep the image list in step with .github/workflows/test-recipes.yml. `suMode`: also run the variants marked `ci.su` in the su -c form (the app's form for a host with no sudo), from the user's login shell. `systemd`: false for an image whose init is not systemd (a Devuan image): the harness then asks recipes_lib.SYSTEMD_INHERITANCE (engine.docker.rootless-prepare) WITHOUT the image's ID_LIKE, as meshTerm does (ContainerHostFixes.systemdInheritance), so the inherited apt line (dbus-user-session, no candidate on Devuan 6) is never run there.",
   "images": [
     {
       "image": "debian:12",
