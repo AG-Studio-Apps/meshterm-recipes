@@ -39,6 +39,13 @@ MAX_ID_LIKE = 16
 # any variant's `ids`, never inherits (docs/container-idlike-alpine-plan.md 9.2). Passed to `parent` explicitly.
 CONTAINERS_CLASSIFIER_IDS = ("ubuntu", "debian", "raspbian", "linuxmint", "pop", "fedora", "rhel", "centos", "rocky",
                              "almalinux", "alpine")
+# The recipe family meshTerm's Containers classifier gives each of those ids (ContainerHostOS.parentFamilies, the 2.3.2
+# compat profile's `parentFamilies`): when a parent resolves for a host whose own family is `unknown`, the lookup takes
+# the parent's family from here (`recipe_os`; docs/container-idlike-alpine-plan.md 9.5, stage C). A parent with no
+# entry (arch) leaves the family `unknown`.
+CONTAINERS_PARENT_FAMILIES = {**{i: "apt" for i in ("ubuntu", "debian", "raspbian", "linuxmint", "pop")},
+                              **{i: "dnf" for i in ("fedora", "rhel", "centos", "rocky", "almalinux")},
+                              "alpine": "apk"}
 # The ID_LIKE family roots (HostRecipeDocument.idLikeFamilyRoots, the same list): os-release ID_LIKE values that name a
 # distribution FAMILY a derivative is built on, not a derivative. While resolving a parent, a root that is not on the
 # document's `idLike` allowlist is RECOGNISED-BUT-EXCLUDED: the walk stops there and the host gets no parent
@@ -374,6 +381,19 @@ def intent_parent(doc, intent, distro_id, id_like, classifier_ids=()):
     return parent(doc, distro_id, id_like, classifier_ids) if inherits_id_like(intent) else None
 
 
+def recipe_os(doc, intent, family, distro_id, id_like, classifier_ids=(), parent_families=None):
+    """(family, parent, family_inherited) to pass to `select` for `intent` (HostRecipeDocument.resolved, as
+    HostRecipeStore.command resolves it from the document IN USE, and passes unchanged to the bundled fallback): the
+    parent (`intent_parent`), and with it the parent's family from `parent_families` (e.g.
+    CONTAINERS_PARENT_FAMILIES) when the host's own `family` is `unknown`, marked inherited. Both come from the same
+    document, so its kill switch turns the family back too."""
+    parent_id = intent_parent(doc, intent, distro_id, id_like, classifier_ids)
+    inherited = (parent_families or {}).get(parent_id) if parent_id and family == "unknown" else None
+    if inherited and inherited != "unknown":
+        return inherited, parent_id, True
+    return family, parent_id, False
+
+
 def parent(doc, distro_id, id_like, classifier_ids=()):
     """The ONE parent a host inherits recipe lines from (HostRecipeDocument.parent), None for none: never for a
     distro the document or the app's classifier (`classifier_ids`, e.g. CONTAINERS_CLASSIFIER_IDS) names. Otherwise
@@ -403,8 +423,8 @@ def parent(doc, distro_id, id_like, classifier_ids=()):
 def score(variant, family, distro_id=None, version=None, parent_id=None, family_inherited=False):
     """How specifically `variant` applies (higher wins), None when it does not (HostRecipeVariant.score). An id
     match is 8, the inherited parent's 6 (only on a variant without a version range: the VERSION_ID is the
-    derivative's), a version range 2, the family 1, `any` 0. `family_inherited`: the caller took `family` from the
-    parent (meshTerm's Containers recipe OS), so a version-only line does not match either (its range is the
+    derivative's), a version range 2, the family 1, `any` 0. `family_inherited`: `family` is the parent's
+    (`recipe_os`), so a version-only line does not match either (its range is the
     family's distributions' versions, not the derivative's)."""
     exact = family in variant["families"]
     if not exact and ("any" not in variant["families"] or family == "windows"):

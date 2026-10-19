@@ -4,7 +4,7 @@
 For each image in ci/images.json, each recipe family tested there and each intent, the harness picks the variant
 the app would pick for that image (`recipes_lib.select`, from the image's /etc/os-release ID and VERSION_ID, and, for
 the Containers intents only (`recipes_lib.ID_LIKE_INTENTS`), the parent its ID_LIKE inherits through the file's
-top-level `idLike`, as meshTerm 2.3.2 resolves it),
+top-level `idLike` and, on an `unknown` pass, the parent's family, as meshTerm 2.3.2 resolves them: `recipe_os`),
 renders it the way the app does, and runs it in a FRESH container (one at a time, `docker run --rm`):
 
   root   the bare form (no sudo), as root, on the untouched image (empty package lists and all).
@@ -133,15 +133,19 @@ def plan(doc, matrix, args):
             for intent in sorted(doc["intents"]):
                 if args.intent and intent not in args.intent:
                     continue
-                # Only the intents meshTerm asks with the ID_LIKE parent (lib.ID_LIKE_INTENTS) get it.
-                parent = lib.intent_parent(doc, intent, distro_id, id_like, lib.CONTAINERS_CLASSIFIER_IDS)
-                variant = lib.select(doc, intent, family, distro_id, version_id, parent_id=parent)
+                # Only the intents meshTerm asks with the ID_LIKE parent (lib.ID_LIKE_INTENTS) get it, and with it
+                # the parent's family on an `unknown` pass (meshTerm 2.3.2's Containers recipe OS, lib.recipe_os).
+                selected, parent, inherited = lib.recipe_os(doc, intent, family, distro_id, id_like,
+                                                            lib.CONTAINERS_CLASSIFIER_IDS,
+                                                            lib.CONTAINERS_PARENT_FAMILIES)
+                variant = lib.select(doc, intent, selected, distro_id, version_id, parent_id=parent,
+                                     family_inherited=inherited)
                 if variant is None:
                     continue
                 if family == "any" or "any" in variant["families"]:
                     if family != "any":
                         continue  # an `any` line is tested once per image, in the `any` pass
-                elif family not in variant["families"]:
+                elif selected not in variant["families"]:
                     continue
                 ci = variant.get("ci", {})
                 modes = ("root", "user") + (("su",) if entry.get("suMode") and ci.get("su") else ())

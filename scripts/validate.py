@@ -430,9 +430,10 @@ def run_format_cases():
         if "parent" in case and parent != case["parent"]:
             print(f"self-test FAIL: parent {case.get('why', '')} {os_}: {parent!r}, expected {case['parent']!r}")
             failures += 1
-        inherit = lib.intent_parent(doc, intent, os_.get("id"), os_.get("idLike", []), case.get("classifierIds", ()))
-        picked = lib.select(doc, intent, os_["family"], os_.get("id"), os_.get("versionID"), bundled=bundled,
-                            parent_id=inherit, family_inherited=os_.get("familyInherited", False))
+        family, inherit, inherited = lib.recipe_os(doc, intent, os_["family"], os_.get("id"), os_.get("idLike", []),
+                                                   case.get("classifierIds", ()), case.get("parentFamilies"))
+        picked = lib.select(doc, intent, family, os_.get("id"), os_.get("versionID"), bundled=bundled,
+                            parent_id=inherit, family_inherited=inherited)
         got = picked["run"] if picked else None
         if got != case["pick"]:
             print(f"self-test FAIL: selection {case.get('why', '')} {os_}: {got!r}, expected {case['pick']!r}")
@@ -720,6 +721,10 @@ def self_test():
             or lib.parent(allow, "X", ["ARCH"]) != "arch" or lib.parent(allow, None, ["debian"]) != "debian" \
             or lib.parent(allow, "alpine", ["arch"], lib.CONTAINERS_CLASSIFIER_IDS) is not None:
         print("self-test FAIL: parent()")
+        failures += 1
+    # The Containers parent families are the classifier's families, id for id (ContainerHostOS.parentFamilies).
+    if set(lib.CONTAINERS_PARENT_FAMILIES) != set(lib.CONTAINERS_CLASSIFIER_IDS):
+        print("self-test FAIL: CONTAINERS_PARENT_FAMILIES is not keyed by CONTAINERS_CLASSIFIER_IDS")
         failures += 1
     # The resolver: an id variant beats the family; a range needs a VERSION_ID.
     doc = lib.load(good)

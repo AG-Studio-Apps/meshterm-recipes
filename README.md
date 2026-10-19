@@ -86,7 +86,11 @@ foreground, at most every 12 hours (1 hour after a failure).
   inherits `ubuntu` and `ID_LIKE="rhel centos fedora"` inherits nothing while `rhel` is off the list. The parent is
   resolved from the file in use (the id and the tokens trimmed and lower-cased), and an `ids` line
   naming it matches as 6 (between an id match, 8, and a version range, 2) but only without `versions`; an intent with
-  a versioned line naming the parent does not use the parent at all. The parent applies ONLY to the intents
+  a versioned line naming the parent does not use the parent at all. With the parent, a host whose own family is
+  `unknown` also takes the parent's recipe FAMILY (`recipes_lib.CONTAINERS_PARENT_FAMILIES`, the app classifier's
+  families: debian/ubuntu -> apt, fedora -> dnf, alpine -> apk; arch has none and stays `unknown`), so family-level
+  lines apply (elementary -> the apt lines), except version-only ones (their range is the family's distributions').
+  The family is resolved with the parent, from the same file, so `"idLike": []` turns both off. The parent applies ONLY to the intents
   `recipes_lib.ID_LIKE_INTENTS` lists (meshTerm 2.3.2: the Containers intents, `engine.*`, `compose.*`, `podman.*`,
   `git.install`, `ca-certificates.install`, `sudo.install`, `sudo.grant`; tmux, agents, packages, sshd, firewall and
   the rest follow in 2.3.3); the format cases' `idLikeIntents` pins the app to the same list. So naming a derivative
