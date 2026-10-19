@@ -46,6 +46,13 @@ CONTAINERS_CLASSIFIER_IDS = ("ubuntu", "debian", "raspbian", "linuxmint", "pop",
 # linuxmint, or an id nobody recognises) is skipped. ci/format-cases.json's `familyRoots` pins both twins to it.
 ID_LIKE_FAMILY_ROOTS = frozenset({"alpine", "arch", "centos", "debian", "fedora", "gentoo", "mandriva", "opensuse",
                                   "rhel", "slackware", "suse", "ubuntu"})
+# The intents a parent applies to (HostRecipeIntent.idLikePatterns, the same list): in meshTerm 2.3.2 ONLY the
+# Containers intents (James 2026-10-19: the other OS probes, tmux install, agents and the bare `family: unknown`
+# lookups, follow in 2.3.3), the intents the app requests through Containers' recipe OS. A pattern is an exact intent
+# id or a prefix ending in `*`. ci/format-cases.json's `idLikeIntents` pins both twins to it; for any other intent the
+# parent is never passed, whatever the file's `idLike` says.
+ID_LIKE_INTENTS = ("ca-certificates.install", "compose.*", "engine.*", "git.install", "podman.*", "sudo.grant",
+                   "sudo.install")
 PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
 INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\Z")
@@ -356,6 +363,17 @@ def named_ids(doc):
     return {i for variants in doc["intents"].values() for v in variants for i in v.get("ids", ())}
 
 
+def inherits_id_like(intent):
+    """Whether `intent` takes the ID_LIKE parent (ID_LIKE_INTENTS)."""
+    return any(intent.startswith(p[:-1]) if p.endswith("*") else intent == p for p in ID_LIKE_INTENTS)
+
+
+def intent_parent(doc, intent, distro_id, id_like, classifier_ids=()):
+    """The parent to pass to `select` for `intent` (HostRecipeStore.command): `parent` for an ID_LIKE intent, else
+    None."""
+    return parent(doc, distro_id, id_like, classifier_ids) if inherits_id_like(intent) else None
+
+
 def parent(doc, distro_id, id_like, classifier_ids=()):
     """The ONE parent a host inherits recipe lines from (HostRecipeDocument.parent), None for none: never for a
     distro the document or the app's classifier (`classifier_ids`, e.g. CONTAINERS_CLASSIFIER_IDS) names. Otherwise
@@ -363,16 +381,17 @@ def parent(doc, distro_id, id_like, classifier_ids=()):
     is the parent; a family root off it (ID_LIKE_FAMILY_ROOTS: rhel, centos, suse, ...) stops the walk with no
     parent; any other token (a named derivative such as linuxmint, or an unrecognised id) is skipped. So
     `linuxmint ubuntu` -> ubuntu, `rhel centos fedora` -> None. Resolve it from the document IN USE and pass the
-    same parent to the bundled fallback, so a hosted kill switch also holds there."""
+    same parent to the bundled fallback, so a hosted kill switch also holds there. The id and every token are trimmed
+    and lower-cased first (an empty token is skipped)."""
     allowed = doc.get("idLike") or []
     if not allowed or not id_like:
         return None
-    distro_id = distro_id.lower() if distro_id else None
+    distro_id = (distro_id or "").strip().lower() or None
     if distro_id and (distro_id in named_ids(doc) or distro_id in classifier_ids):
         return None
     for token in id_like:
-        token = token.lower()
-        if token == distro_id:
+        token = token.strip().lower()
+        if not token or token == distro_id:
             continue
         if token in allowed:
             return token

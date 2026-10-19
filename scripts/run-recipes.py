@@ -2,8 +2,9 @@
 """Run every recipe on fresh distro containers and check the result.
 
 For each image in ci/images.json, each recipe family tested there and each intent, the harness picks the variant
-the app would pick for that image (`recipes_lib.select`, from the image's /etc/os-release ID and VERSION_ID, and the
-parent its ID_LIKE inherits through the file's top-level `idLike`, as meshTerm's Containers resolves it),
+the app would pick for that image (`recipes_lib.select`, from the image's /etc/os-release ID and VERSION_ID, and, for
+the Containers intents only (`recipes_lib.ID_LIKE_INTENTS`), the parent its ID_LIKE inherits through the file's
+top-level `idLike`, as meshTerm 2.3.2 resolves it),
 renders it the way the app does, and runs it in a FRESH container (one at a time, `docker run --rm`):
 
   root   the bare form (no sudo), as root, on the untouched image (empty package lists and all).
@@ -62,15 +63,29 @@ SUDO_SETUP = {
 }
 
 
+def parse_os_release(text):
+    """os-release's fields as a shell that sources it reads them (the app's probe does `. /etc/os-release`): each
+    value is one shell word, so single and double quotes and backslash escapes are removed (shlex). A line shlex
+    cannot read (an unclosed quote) or that is not KEY=value is skipped. Returns (ID, VERSION_ID, ID_LIKE tokens)."""
+    fields = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        try:
+            words = shlex.split(value, comments=True)
+        except ValueError:
+            continue
+        fields[key.strip()] = " ".join(words)
+    return (fields.get("ID", "").lower(), fields.get("VERSION_ID") or None,
+            fields.get("ID_LIKE", "").lower().split())
+
+
 def os_release(image):
     out = subprocess.run(["docker", "run", "--rm", image, "cat", "/etc/os-release"], check=True,
                          capture_output=True, text=True, timeout=600).stdout
-    fields = {}
-    for line in out.splitlines():
-        if "=" in line:
-            key, value = line.split("=", 1)
-            fields[key] = value.strip().strip('"')
-    return fields.get("ID", "").lower(), fields.get("VERSION_ID"), fields.get("ID_LIKE", "").lower().split()
+    return parse_os_release(out)
 
 
 def packages_for(doc, variant, intent, native):
@@ -114,11 +129,12 @@ def plan(doc, matrix, args):
         distro_id = distro_id or image.split(":")[0].split("/")[-1]
         # A derivative the table does not list: its first ID_LIKE token the table knows (Garuda -> arch -> pacman).
         native = NATIVE.get(distro_id) or next((NATIVE[t] for t in id_like if t in NATIVE), "")
-        parent = lib.parent(doc, distro_id, id_like, lib.CONTAINERS_CLASSIFIER_IDS)
         for family in entry["families"]:
             for intent in sorted(doc["intents"]):
                 if args.intent and intent not in args.intent:
                     continue
+                # Only the intents meshTerm asks with the ID_LIKE parent (lib.ID_LIKE_INTENTS) get it.
+                parent = lib.intent_parent(doc, intent, distro_id, id_like, lib.CONTAINERS_CLASSIFIER_IDS)
                 variant = lib.select(doc, intent, family, distro_id, version_id, parent_id=parent)
                 if variant is None:
                     continue
@@ -209,6 +225,25 @@ def tail(output, lines=TAIL_LINES):
     return "\n".join("      | " + line for line in kept) if kept else "      | (no output)"
 
 
+def self_test():
+    """parse_os_release against what `. /etc/os-release` gives a shell."""
+    failures = 0
+    for text, want in [
+            ('ID=arch\nVERSION_ID=1\n', ("arch", "1", [])),
+            ('ID="rocky"\nID_LIKE="rhel centos fedora"\nVERSION_ID="9.8"\n', ("rocky", "9.8", ["rhel", "centos", "fedora"])),
+            ("ID='elementary'\nID_LIKE='ubuntu debian'\n", ("elementary", None, ["ubuntu", "debian"])),
+            ('ID=Kali\nID_LIKE=debian # comment\n', ("kali", None, ["debian"])),
+            ('# a comment\n\nID=x\nID_LIKE="a \\"b\\""\nVERSION_ID=\n', ("x", None, ["a", '"b"'])),
+            ('ID="unclosed\nID_LIKE=arch\n', ("", None, ["arch"])),
+            ('  ID=mageia\nID_LIKE="mandriva fedora"\n', ("mageia", None, ["mandriva", "fedora"]))]:
+        got = parse_os_release(text)
+        if got != want:
+            print(f"self-test FAIL: parse_os_release({text!r}): {got!r}, expected {want!r}")
+            failures += 1
+    print("self-test:", "OK" if not failures else f"{failures} FAILED")
+    return 1 if failures else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--image", action="append")
@@ -216,7 +251,10 @@ def main():
     parser.add_argument("--mode", choices=("root", "user", "su"))
     parser.add_argument("--list", action="store_true", help="print the cases, run nothing")
     parser.add_argument("--summary", help="append a Markdown table here (GITHUB_STEP_SUMMARY)")
+    parser.add_argument("--self-test", action="store_true", help="test the os-release parser and exit")
     args = parser.parse_args()
+    if args.self_test:
+        return self_test()
     with open(os.path.join(ROOT, "recipes.json"), "rb") as handle:
         doc = lib.load(handle.read())
     with open(os.path.join(ROOT, "ci", "images.json")) as handle:

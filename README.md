@@ -84,11 +84,16 @@ foreground, at most every 12 hours (1 hour after a failure).
   slackware, suse, ubuntu; the app holds the same list) stops the walk and the host gets no parent; any other token
   (a named derivative such as `linuxmint`, or an id nobody recognises) is skipped. So `ID_LIKE="linuxmint ubuntu"`
   inherits `ubuntu` and `ID_LIKE="rhel centos fedora"` inherits nothing while `rhel` is off the list. The parent is
-  resolved from the file in use, and an `ids` line
+  resolved from the file in use (the id and the tokens trimmed and lower-cased), and an `ids` line
   naming it matches as 6 (between an id match, 8, and a version range, 2) but only without `versions`; an intent with
-  a versioned line naming the parent does not use the parent at all. So naming a derivative in one intent moves
-  EVERY intent of it off its parent's lines: `validate.py --declared` requires `{"named": "<id>"}` for an id
-  `compat/distros.json` lists with an `idLike`, and a change to `idLike` itself is declared as `{"kind": "idLike"}`.
+  a versioned line naming the parent does not use the parent at all. The parent applies ONLY to the intents
+  `recipes_lib.ID_LIKE_INTENTS` lists (meshTerm 2.3.2: the Containers intents, `engine.*`, `compose.*`, `podman.*`,
+  `git.install`, `ca-certificates.install`, `sudo.install`, `sudo.grant`; tmux, agents, packages, sshd, firewall and
+  the rest follow in 2.3.3); the format cases' `idLikeIntents` pins the app to the same list. So naming a derivative
+  in one intent moves EVERY intent of it off its parent's lines: `validate.py --declared` requires
+  `{"named": "<id>"}` for an id `compat/distros.json` lists with an `idLike` (classifier ids aside), `{"unnamed": "<id>"}`
+  for one that is no longer named (it starts inheriting), and a change to `idLike` itself is declared as
+  `{"kind": "idLike"}`. From serial 12 a `--declared` run without `compat/distros.json` (or `--distros`) FAILS.
 - **admin** (optional): needs an administrator even without `{{sudo}}` (Docker's install script, which asks for
   sudo itself).
 - **packages**: package id -> family -> name, for `packages.install`. A family with no entry needs nothing.
