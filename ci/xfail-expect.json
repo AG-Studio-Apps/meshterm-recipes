@@ -1,0 +1,8 @@
+{
+  "_comment": "What an expected failure must print (scripts/run-recipes.py). A variant's `ci.xfail` (recipes.json) marks an image where the recipe is known to fail; an entry here, keyed by intent then image, is a Python regular expression (re.search, multi-line output, stdout and stderr interleaved) the failing case's output must match, so an xfail passes only for the failure it was measured with: any other failure on that image is a FAIL. Kept outside recipes.json so the signed data file (and its serial's sha) does not change. Every entry must name an image some variant of that intent marks `xfail` (checked at start).",
+  "expect": {
+    "engine.docker.install-script": {
+      "devuan/devuan:latest": "Unsupported distribution 'devuan'"
+    }
+  }
+}

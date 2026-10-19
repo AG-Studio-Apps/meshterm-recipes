@@ -110,7 +110,8 @@ foreground, at most every 12 hours (1 hour after a failure).
   `$MT_USER` is the user it ran as) or `skip` (why it cannot run in a container), and optionally `needs` (package ids
   installed first, as root), `before` (a shell line run first, as root), `packages` (the `{{packages}}` value),
   `rootOnly` / `userOnly` (why one pass is skipped), `skipOn` and `xfail` (image -> reason; an xfail is reported, never
-  red, and an XPASS asks for the entry to go), and `port`, `proto`, `group`, `path` (the values to render with).
+  red, and an XPASS asks for the entry to go; `ci/xfail-expect.json` can pin the message an xfail was measured with,
+  intent -> image -> regular expression, and then any other failure there is red), and `port`, `proto`, `group`, `path` (the values to render with).
   `{{user}}` renders as the case's own user (`mt` in the sudo-user pass, `root` in the root pass).
 - **Agent and herdr lines** (`agent.*`, `herdr.install`; `scripts/validate.py`): no `{{sudo}}` or `admin`, https URLs
   only, never `/tmp` or a download piped into a shell; an official installer is downloaded with

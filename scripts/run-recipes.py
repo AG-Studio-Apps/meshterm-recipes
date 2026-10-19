@@ -18,7 +18,8 @@ then runs the variant's `ci.check` as root (MT_USER names the user the recipe ra
 what to skip (`skip`, `skipOn`, `rootOnly`, `userOnly`), what to install first as root (`needs`, ids from the
 packages table; `before`, a shell line), the `{{packages}}` value (`packages`; packages.install uses every name for
 the image's family) and which images are known to fail (`xfail`, reported, never red; an XPASS asks for the entry
-to go).
+to go). An xfail may carry the message it was measured with (ci/xfail-expect.json, intent -> image -> regular
+expression): then it passes only when the failing case's output matches it, and any other failure there is a FAIL.
 
     scripts/run-recipes.py                               # the whole matrix (slow: one container per case)
     scripts/run-recipes.py --image debian:12 --mode root # a slice
@@ -31,6 +32,7 @@ Exit status 1 when any case FAILs (an unexpected failure, or a check that does n
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -70,6 +72,42 @@ SUDO_SETUP_DERIVATIVE = {
 }
 # The distro ids whose image is the family's own (SUDO_SETUP); any other id with that native family is a derivative.
 FAMILY_OWN_IDS = {"pacman": {"arch", "archlinux"}}
+
+
+def load_xfail_expect(doc, path=None):
+    """ci/xfail-expect.json's `expect` (intent -> image -> compiled pattern). Raises ValueError for an entry no
+    variant's `ci.xfail` backs (a typo would otherwise never be consulted) or a pattern that does not compile."""
+    path = path or os.path.join(ROOT, "ci", "xfail-expect.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path) as handle:
+        expect = json.load(handle).get("expect", {})
+    compiled = {}
+    for intent, images in expect.items():
+        variants = doc["intents"].get(intent)
+        if variants is None:
+            raise ValueError(f"{path}: unknown intent {intent!r}")
+        for image, pattern in images.items():
+            if not any(image in v.get("ci", {}).get("xfail", {}) for v in variants):
+                raise ValueError(f"{path}: {intent} on {image}: no variant of that intent marks it xfail")
+            try:
+                compiled.setdefault(intent, {})[image] = re.compile(pattern, re.MULTILINE)
+            except re.error as error:
+                raise ValueError(f"{path}: {intent} on {image}: bad pattern {pattern!r} ({error})") from None
+    return compiled
+
+
+def classify(code, output, xfail, expected=None, check=""):
+    """A finished case's (status, note). `xfail` is the variant's reason for the image (or None), `expected` its
+    compiled ci/xfail-expect.json pattern (or None): an xfail with a pattern holds only when the output matches."""
+    if code == 0:
+        return ("XPASS", f"passes now: remove its xfail ({xfail})") if xfail else ("PASS", "")
+    why = {10: "the recipe failed", 11: "the check failed: " + check, 124: "timed out"}.get(code, f"exit {code}")
+    if not xfail:
+        return "FAIL", why
+    if expected is not None and not expected.search(output):
+        return "FAIL", f"{why}, but not as expected (xfail needs output matching {expected.pattern!r}: {xfail})"
+    return "XFAIL", xfail
 
 
 def sudo_setup(native, distro_id):
@@ -295,6 +333,46 @@ def self_test():
         if sudo_setup(native, distro) != want:
             print(f"self-test FAIL: sudo_setup({native!r}, {distro!r})")
             failures += 1
+    # An xfail with an expected message holds only for that failure; without one, any failure is the xfail.
+    devuan = re.compile("Unsupported distribution 'devuan'", re.MULTILINE)
+    for code, output, xfail, expected, want in [
+            (10, "x\nERROR: Unsupported distribution 'devuan'\n--- recipe exit 1", "why", devuan, "XFAIL"),
+            (10, "curl: (6) Could not resolve host: get.docker.com\n--- recipe exit 6", "why", devuan, "FAIL"),
+            (11, "", "why", devuan, "FAIL"),
+            (124, "timed out", "why", devuan, "FAIL"),
+            (10, "anything", "why", None, "XFAIL"),
+            (0, "", "why", devuan, "XPASS"),
+            (10, "Unsupported distribution 'devuan'", None, None, "FAIL"),
+            (0, "", None, None, "PASS")]:
+        got = classify(code, output, xfail, expected, "check")[0]
+        if got != want:
+            print(f"self-test FAIL: classify({code}, {output!r}, xfail={xfail!r}, expected={expected and expected.pattern!r}): {got}, expected {want}")
+            failures += 1
+    # The repository's own ci/xfail-expect.json loads (every entry backed by an xfail), and a stray entry is refused.
+    try:
+        real = load_xfail_expect(lib.load(open(os.path.join(ROOT, "recipes.json"), "rb").read()))
+        if "devuan/devuan:latest" not in real.get("engine.docker.install-script", {}):
+            print("self-test FAIL: ci/xfail-expect.json has no Devuan get.docker.com pattern")
+            failures += 1
+    except ValueError as error:
+        print(f"self-test FAIL: ci/xfail-expect.json: {error}")
+        failures += 1
+    with tempfile.TemporaryDirectory() as tmp:
+        for body, ok in [({"expect": {"engine.docker.install-script": {"debian:12": "x"}}}, False),
+                         ({"expect": {"no.such.intent": {"debian:12": "x"}}}, False),
+                         ({"expect": {"engine.docker.install-script": {"devuan/devuan:latest": "("}}}, False),
+                         ({"expect": {"engine.docker.install-script": {"devuan/devuan:latest": "x"}}}, True)]:
+            stray = os.path.join(tmp, "expect.json")
+            with open(stray, "w") as handle:
+                json.dump(body, handle)
+            try:
+                load_xfail_expect(doc, stray)
+                refused = False
+            except ValueError:
+                refused = True
+            if refused == ok:
+                print(f"self-test FAIL: load_xfail_expect({body!r}): refused={refused}")
+                failures += 1
     print("self-test:", "OK" if not failures else f"{failures} FAILED")
     return 1 if failures else 0
 
@@ -306,7 +384,7 @@ def main():
     parser.add_argument("--mode", choices=("root", "user", "su"))
     parser.add_argument("--list", action="store_true", help="print the cases, run nothing")
     parser.add_argument("--summary", help="append a Markdown table here (GITHUB_STEP_SUMMARY)")
-    parser.add_argument("--self-test", action="store_true", help="test the os-release parser and exit")
+    parser.add_argument("--self-test", action="store_true", help="test the os-release parser, the xfail patterns and exit")
     args = parser.parse_args()
     if args.self_test:
         return self_test()
@@ -314,6 +392,11 @@ def main():
         doc = lib.load(handle.read())
     with open(os.path.join(ROOT, "ci", "images.json")) as handle:
         matrix = json.load(handle)
+    try:
+        expect = load_xfail_expect(doc)
+    except ValueError as error:
+        print(f"FAIL  {error}")
+        return 1
 
     rows, failed, failures = [], 0, []
     for case in plan(doc, matrix, args):
@@ -331,15 +414,10 @@ def main():
             print(f"RUN   {label}\n      {case['command']}")
             continue
         code, output, seconds = run_case(doc, case)
-        xfail = case["variant"]["ci"].get("xfail", {}).get(case["image"])
-        if code == 0:
-            status, note = ("XPASS", f"passes now: remove its xfail ({xfail})") if xfail else ("PASS", "")
-        else:
-            why = {10: "the recipe failed", 11: "the check failed: " + case["variant"]["ci"]["check"],
-                   124: "timed out"}.get(code, f"exit {code}")
-            status, note = ("XFAIL", xfail) if xfail else ("FAIL", why)
-            if status == "FAIL":
-                failed += 1
+        status, note = classify(code, output, case["variant"]["ci"].get("xfail", {}).get(case["image"]),
+                                expect.get(case["intent"], {}).get(case["image"]), case["variant"]["ci"]["check"])
+        if status == "FAIL":
+            failed += 1
         rows.append((case, status, note))
         print(f"{status:<5} {label} ({seconds:.0f} s){': ' + note if note else ''}", flush=True)
         if status == "FAIL":
