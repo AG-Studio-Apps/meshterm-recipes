@@ -2,7 +2,8 @@
 """Run every recipe on fresh distro containers and check the result.
 
 For each image in ci/images.json, each recipe family tested there and each intent, the harness picks the variant
-the app would pick for that image (`recipes_lib.select`, from the image's /etc/os-release ID and VERSION_ID),
+the app would pick for that image (`recipes_lib.select`, from the image's /etc/os-release ID and VERSION_ID, and the
+parent its ID_LIKE inherits through the file's top-level `idLike`, as meshTerm's Containers resolves it),
 renders it the way the app does, and runs it in a FRESH container (one at a time, `docker run --rm`):
 
   root   the bare form (no sudo), as root, on the untouched image (empty package lists and all).
@@ -45,6 +46,7 @@ TAIL_LINES = 30
 # The image's own package-manager family (for `needs` and the sudo set-up), from os-release ID / ID_LIKE.
 NATIVE = {"debian": "apt", "ubuntu": "apt", "fedora": "dnf", "rocky": "dnf", "rockylinux": "dnf", "rhel": "dnf", "almalinux": "dnf",
           "centos": "dnf", "alpine": "apk", "amzn": "dnf", "amazonlinux": "dnf", "arch": "pacman", "archlinux": "pacman",
+          "manjaro": "pacman", "cachyos": "pacman",
           "opensuse-leap": "zypper", "opensuse": "zypper", "leap": "zypper", "opensuse-tumbleweed": "zypper"}
 SUDO_SETUP = {
     "apt": "apt-get update -qq && apt-get install -y -qq sudo >/dev/null && rm -rf /var/lib/apt/lists/* "
@@ -68,7 +70,7 @@ def os_release(image):
         if "=" in line:
             key, value = line.split("=", 1)
             fields[key] = value.strip().strip('"')
-    return fields.get("ID", "").lower(), fields.get("VERSION_ID")
+    return fields.get("ID", "").lower(), fields.get("VERSION_ID"), fields.get("ID_LIKE", "").lower().split()
 
 
 def packages_for(doc, variant, intent, native):
@@ -100,21 +102,24 @@ def plan(doc, matrix, args):
         image = entry["image"]
         if args.image and image not in args.image:
             continue
-        distro_id, version_id = entry.get("id"), entry.get("versionID")
+        distro_id, version_id, id_like = entry.get("id"), entry.get("versionID"), entry.get("idLike", [])
         if distro_id is None and not args.list:
             try:
-                distro_id, version_id = os_release(image)
+                distro_id, version_id, id_like = os_release(image)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                 print(f"FAIL  {image}: cannot read /etc/os-release ({error})", flush=True)
                 yield dict(image=image, mode="-", family="-", intent="(image)", variant={"ci": {}}, native="",
                            command=None, skip=None)
                 continue
-        native = NATIVE.get(distro_id or image.split(":")[0].split("/")[-1], "")
+        distro_id = distro_id or image.split(":")[0].split("/")[-1]
+        # A derivative the table does not list: its first ID_LIKE token the table knows (Garuda -> arch -> pacman).
+        native = NATIVE.get(distro_id) or next((NATIVE[t] for t in id_like if t in NATIVE), "")
+        parent = lib.parent(doc, distro_id, id_like, lib.CONTAINERS_CLASSIFIER_IDS)
         for family in entry["families"]:
             for intent in sorted(doc["intents"]):
                 if args.intent and intent not in args.intent:
                     continue
-                variant = lib.select(doc, intent, family, distro_id or image.split(":")[0].split("/")[-1], version_id)
+                variant = lib.select(doc, intent, family, distro_id, version_id, parent_id=parent)
                 if variant is None:
                     continue
                 if family == "any" or "any" in variant["families"]:

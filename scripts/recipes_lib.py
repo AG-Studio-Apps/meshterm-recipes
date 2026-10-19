@@ -32,6 +32,13 @@ FAMILIES = {"apt", "dnf", "yum", "apk", "pacman", "zypper", "macos", "unknown", 
 TOKEN = re.compile(r"^[a-z0-9-]{1,32}\Z")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9]{1,32}\Z")
 DISTRO_ID = re.compile(r"^[a-z0-9._-]{1,64}\Z")
+# Top-level `idLike` (serial 12, meshTerm 2.3.2): the parents a derivative may inherit recipe lines from through
+# os-release ID_LIKE. Absent or empty = inheritance off (the kill switch); older apps ignore the key.
+MAX_ID_LIKE = 16
+# The ids meshTerm's Containers classifier names in code (ContainerHostOS.family's lists). A distro named there, or by
+# any variant's `ids`, never inherits (docs/container-idlike-alpine-plan.md 9.2). Passed to `parent` explicitly.
+CONTAINERS_CLASSIFIER_IDS = ("ubuntu", "debian", "raspbian", "linuxmint", "pop", "fedora", "rhel", "centos", "rocky",
+                             "almalinux", "alpine")
 PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
 INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\Z")
@@ -244,6 +251,11 @@ def load(data):
         raise RecipeError("serial must be an integer >= 1")
     if not isinstance(doc.get("date"), str) or not DATE.match(doc["date"]):
         raise RecipeError("date must be YYYY-MM-DD")
+    if doc.get("idLike") is not None:  # an explicit null is absent, as in the app's decoder
+        id_like = doc["idLike"]
+        if not isinstance(id_like, list) or len(id_like) > MAX_ID_LIKE or len(set(map(str, id_like))) != len(id_like) \
+                or not all(isinstance(i, str) and DISTRO_ID.match(i) for i in id_like):
+            raise RecipeError(f"idLike: at most {MAX_ID_LIKE} distinct distro ids")
     packages = doc.get("packages")
     if not isinstance(packages, dict):
         raise RecipeError("packages must be an object")
@@ -331,18 +343,49 @@ def check_covers(doc, previous):
             raise RecipeError(f"drops package {package}")
 
 
-def score(variant, family, distro_id=None, version=None):
-    """How specifically `variant` applies (higher wins), None when it does not (HostRecipeVariant.score)."""
+def named_ids(doc):
+    """Every distro id a variant of any intent names (unusable variants included): such a distro is fully specified
+    and never inherits."""
+    return {i for variants in doc["intents"].values() for v in variants for i in v.get("ids", ())}
+
+
+def parent(doc, distro_id, id_like, classifier_ids=()):
+    """The ONE parent a host inherits recipe lines from (HostRecipeDocument.parent), None for none: never for a
+    distro the document or the app's classifier (`classifier_ids`, e.g. CONTAINERS_CLASSIFIER_IDS) names; otherwise
+    the first ID_LIKE token on the document's `idLike` allowlist (tokens off the list are skipped). Resolve it from
+    the document IN USE and pass the same parent to the bundled fallback, so a hosted kill switch also holds there."""
+    allowed = doc.get("idLike") or []
+    if not allowed or not id_like:
+        return None
+    distro_id = distro_id.lower() if distro_id else None
+    if distro_id and (distro_id in named_ids(doc) or distro_id in classifier_ids):
+        return None
+    for token in id_like:
+        token = token.lower()
+        if token != distro_id and token in allowed:
+            return token
+    return None
+
+
+def score(variant, family, distro_id=None, version=None, parent_id=None, family_inherited=False):
+    """How specifically `variant` applies (higher wins), None when it does not (HostRecipeVariant.score). An id
+    match is 8, the inherited parent's 6 (only on a variant without a version range: the VERSION_ID is the
+    derivative's), a version range 2, the family 1, `any` 0. `family_inherited`: the caller took `family` from the
+    parent (meshTerm's Containers recipe OS), so a version-only line does not match either (its range is the
+    family's distributions' versions, not the derivative's)."""
     exact = family in variant["families"]
     if not exact and ("any" not in variant["families"] or family == "windows"):
         return None
     value = 1 if exact else 0
     if "ids" in variant:
-        if not distro_id or distro_id.lower() not in variant["ids"]:
+        if distro_id and distro_id.lower() in variant["ids"]:
+            value += 8
+        elif parent_id and parent_id in variant["ids"] and "versions" not in variant:
+            return value + 6
+        else:
             return None
-        value += 4
     if "versions" in variant:
-        if version is None:
+        if version is None or (family_inherited and "ids" not in variant):
             return None
         low, high = variant["versions"].get("min"), variant["versions"].get("below")
         if low and compare_versions(version, parse_version(low)) < 0:
@@ -353,14 +396,22 @@ def score(variant, family, distro_id=None, version=None):
     return value
 
 
-def select(doc, intent, family, distro_id=None, version_id=None, bundled=None):
+def select(doc, intent, family, distro_id=None, version_id=None, bundled=None, parent_id=None, family_inherited=False):
     """The app's choice (HostRecipeDocument.variant): the most specific matching variant, file order on a tie. When an
     UNUSABLE variant (a later app's) applies at least as specifically as the best usable one, the answer for this
-    intent and OS is the bundled document's (`bundled`; None without one), never a wider usable line."""
+    intent and OS is the bundled document's (`bundled`; None without one), never a wider usable line.
+
+    `parent_id` (from `parent`, resolved against the document in use): an intent with a VERSIONED variant naming the
+    parent does not use the parent at all (the derivative's base version is unknown, so a version-blind parent line
+    may be the wrong one)."""
     best, best_score, blocked = None, None, None
     version = parse_version(version_id) if version_id else None
-    for index, variant in enumerate(doc["intents"].get(intent, [])):
-        value = score(variant, family, distro_id, version)
+    variants = doc["intents"].get(intent, [])
+    inherit = parent_id
+    if inherit and any(inherit in v.get("ids", ()) and "versions" in v for v in variants):
+        inherit = None
+    for index, variant in enumerate(variants):
+        value = score(variant, family, distro_id, version, inherit, family_inherited)
         if value is None:
             continue
         if not is_usable(doc, intent, index):
@@ -369,5 +420,6 @@ def select(doc, intent, family, distro_id=None, version_id=None, bundled=None):
         if best_score is None or value > best_score:
             best, best_score = variant, value
     if blocked is not None and (best_score is None or blocked >= best_score):
-        return select(bundled, intent, family, distro_id, version_id) if bundled is not None else None
+        return select(bundled, intent, family, distro_id, version_id, parent_id=parent_id,
+                      family_inherited=family_inherited) if bundled is not None else None
     return best

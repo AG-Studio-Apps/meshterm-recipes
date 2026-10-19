@@ -54,7 +54,8 @@ foreground, at most every 12 hours (1 hour after a failure).
   the line must pick a package manager at run time), `any` (init-system lines such as `systemctl`).
 - **ids** (optional): `/etc/os-release` `ID` values. **versions** (optional): `{"min": "22.04", "below": "24.04"}`
   over `VERSION_ID` (min inclusive, below exclusive). The most specific matching variant wins: ids and versions,
-  then ids, then versions, then the family, then `any`; file order breaks a tie. Today only the agents' checks know
+  then ids, then the inherited parent's ids (`idLike` below), then versions, then the family, then `any`; file order
+  breaks a tie. Today only the agents' checks know
   a host's VERSION_ID; the tmux and Containers checks know the ID only, so a version-ranged line needs an id- or
   family-level line beside it.
 - **run**: one line of printable ASCII, at most 2,000 characters. Placeholders, and only these:
@@ -73,6 +74,16 @@ foreground, at most every 12 hours (1 hour after a failure).
   variant would be chosen (it scores at least as high as the best usable one), the app uses its bundled line for that
   intent and OS. Every security rule (privilege words, ASCII, placement of the known placeholders, selectors) still
   refuses the whole file.
+- **idLike** (optional, top level; meshTerm 2.3.2+, older apps ignore it): the parents an unnamed derivative may
+  inherit lines from through os-release `ID_LIKE`, e.g. `["arch", "debian", "ubuntu", "fedora"]` (distinct ids, at
+  most 16). Absent or `[]` turns inheritance off: that is the kill switch, and narrowing the list is how a bad
+  inheritance is undone (a hosted file need not keep the bundled file's list). A distro named by ANY variant's `ids`,
+  or by the app's own classifier (`recipes_lib.CONTAINERS_CLASSIFIER_IDS`), never inherits. Otherwise the parent is
+  the first `ID_LIKE` token on the list (tokens off it are skipped), resolved from the file in use, and an `ids` line
+  naming it matches as 6 (between an id match, 8, and a version range, 2) but only without `versions`; an intent with
+  a versioned line naming the parent does not use the parent at all. So naming a derivative in one intent moves
+  EVERY intent of it off its parent's lines: `validate.py --declared` requires `{"named": "<id>"}` for an id
+  `compat/distros.json` lists with an `idLike`, and a change to `idLike` itself is declared as `{"kind": "idLike"}`.
 - **admin** (optional): needs an administrator even without `{{sudo}}` (Docker's install script, which asks for
   sudo itself).
 - **packages**: package id -> family -> name, for `packages.install`. A family with no entry needs nothing.

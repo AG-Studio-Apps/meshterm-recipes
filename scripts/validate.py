@@ -194,10 +194,20 @@ def selector_json(selector):
     return out
 
 
+# The top-level keys every file has (the serial and date change with every publish); any OTHER top-level key is data
+# an app may read (serial 12: `idLike`), so a change to it must be declared.
+FIXED_TOP_LEVEL = {"kind", "schema", "serial", "date", "packages", "intents", lib.UNUSABLE}
+DISTROS = os.path.join(ROOT, "compat", "distros.json")
+
+
 def data_changes(doc, expected):
     """Every app-visible difference between two documents (ci blocks are the CI's and ignored): (intent, selector) for
-    a variant added, removed or changed, and ("package", id, family) for a package-table entry."""
+    a variant added, removed or changed, ("package", id, family) for a package-table entry, and ("top", key, None)
+    for a top-level key other than the fixed ones (`idLike`) added, removed or changed."""
     out = set()
+    for key in (set(doc) | set(expected)) - FIXED_TOP_LEVEL:
+        if doc.get(key) != expected.get(key):
+            out.add(("top", key, None))
     for intent in set(doc["intents"]) | set(expected["intents"]):
         mine = {selector_of(v): v for v in doc["intents"].get(intent, [])}
         theirs = {selector_of(v): v for v in expected["intents"].get(intent, [])}
@@ -214,10 +224,42 @@ def data_changes(doc, expected):
     return out
 
 
-def check_declared(doc, previous, baseline, declared):
+def inheritors(path=DISTROS):
+    """The distro ids compat/distros.json lists with an ID_LIKE (`idLike`): hosts expected to INHERIT their parent's
+    lines. None when the file is not there (it comes with the recipes-watch tooling)."""
+    if not os.path.exists(path):
+        return None
+    with open(path) as handle:
+        rows = json.load(handle).get("distros", [])
+    return {row["id"] for row in rows if isinstance(row, dict) and row.get("id") and row.get("idLike")}
+
+
+def newly_named(doc, previous):
+    return lib.named_ids(doc) - lib.named_ids(previous)
+
+
+def describe(change):
+    kind, a, b = change
+    if kind == "package":
+        return f"package {a} on {b}"
+    if kind == "top":
+        return f"top-level {a}"
+    if kind == "named":
+        return f"{a} newly named (it is an inheritor in compat/distros.json: naming it stops its ID_LIKE inheritance)"
+    return f"{a} {selector_json(b)}"
+
+
+def check_declared(doc, previous, baseline, declared, inheriting=None):
     """docs/recipes-v3-plan.md 6.3: `doc` against `previous` plus the baseline's NEW intents and package ids (the
-    app's code text, moved as it was): every difference is in `declared`, and every declared change is there."""
+    app's code text, moved as it was): every difference is in `declared`, and every declared change is there.
+
+    Entries: {"intent", "selector"} for a variant, {"package", "family"} for a package-table entry, {"kind": <key>}
+    for a top-level key (`{"kind": "idLike"}`), and {"named": <id>} for a distro id the file names for the first time
+    that `inheriting` (compat/distros.json's derivatives with an ID_LIKE) expects to inherit: a named id never
+    inherits (docs/container-idlike-alpine-plan.md 9.2), so naming one in any intent silently moves EVERY intent of
+    that host off its parent's lines; the declaration says that is meant."""
     expected = {"intents": dict(previous["intents"]), "packages": dict(previous["packages"])}
+    expected.update({k: v for k, v in previous.items() if k not in FIXED_TOP_LEVEL})
     for intent, variants in baseline["intents"].items():
         if intent not in previous["intents"]:
             expected["intents"][intent] = variants
@@ -225,12 +267,18 @@ def check_declared(doc, previous, baseline, declared):
         if package not in previous["packages"]:
             expected["packages"][package] = names
     changes = data_changes(doc, expected)
+    if inheriting:
+        changes |= {("named", i, None) for i in newly_named(doc, previous) & inheriting}
     listed = set()
     for entry in declared.get("changes", []):
         if not isinstance(entry, dict) or not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
             raise lib.RecipeError(f"declared entry {entry!r}: needs a reason")
         if "package" in entry:
             key = ("package", entry["package"], entry.get("family"))
+        elif "kind" in entry:
+            key = ("top", entry["kind"], None)
+        elif "named" in entry:
+            key = ("named", entry["named"], None)
         else:
             selector = entry.get("selector", {})
             versions = selector.get("versions", {})
@@ -243,13 +291,9 @@ def check_declared(doc, previous, baseline, declared):
     undeclared = sorted(changes - listed, key=str)
     missing = sorted(listed - changes, key=str)
     if undeclared:
-        kind, a, b = undeclared[0]
-        what = f"package {a} on {b}" if kind == "package" else f"{a} {selector_json(b)}"
-        raise lib.RecipeError(f"{len(undeclared)} undeclared change(s), first: {what}")
+        raise lib.RecipeError(f"{len(undeclared)} undeclared change(s), first: {describe(undeclared[0])}")
     if missing:
-        kind, a, b = missing[0]
-        what = f"package {a} on {b}" if kind == "package" else f"{a} {selector_json(b)}"
-        raise lib.RecipeError(f"{len(missing)} declared change(s) not in the file, first: {what}")
+        raise lib.RecipeError(f"{len(missing)} declared change(s) not in the file, first: {describe(missing[0])}")
     return len(changes)
 
 
@@ -298,9 +342,12 @@ def run_format_cases():
         cases = json.load(handle)
     failures = 0
 
-    def file_with(intent, variants):
-        return json.dumps({"kind": "host-recipes", "schema": 1, "serial": 1, "date": "2026-10-12", "packages": {},
-                           "intents": {intent: variants}}).encode()
+    def file_with(intent, variants, top=None, other_ids=None):
+        intents = {intent: variants}
+        if other_ids:
+            intents["z.z"] = [{"families": ["any"], "ids": other_ids, "run": "other"}]
+        return json.dumps(dict({"kind": "host-recipes", "schema": 1, "serial": 1, "date": "2026-10-12",
+                                "packages": {}, "intents": intents}, **(top or {}))).encode()
 
     def outcome(intent, variant):
         try:
@@ -327,14 +374,30 @@ def run_format_cases():
             print(f"self-test FAIL: render {case['run']!r} {case['values']!r}: {got!r}, expected {case['out']!r}")
             failures += 1
     for case in cases["selection"]:
-        doc = lib.load(file_with("x.y", case["variants"]))
-        bundled = lib.load(file_with("x.y", case["bundled"])) if case["bundled"] else \
+        top = {"idLike": case["idLike"]} if "idLike" in case else None
+        doc = lib.load(file_with("x.y", case["variants"], top, case.get("otherIds")))
+        bundled_top = {"idLike": case["bundledIdLike"]} if "bundledIdLike" in case else None
+        bundled = lib.load(file_with("x.y", case["bundled"], bundled_top)) if case["bundled"] else \
             {"intents": {}, lib.UNUSABLE: set()}
         os_ = case["os"]
-        picked = lib.select(doc, "x.y", os_["family"], os_.get("id"), os_.get("versionID"), bundled=bundled)
+        parent = lib.parent(doc, os_.get("id"), os_.get("idLike", []), case.get("classifierIds", ()))
+        if "parent" in case and parent != case["parent"]:
+            print(f"self-test FAIL: parent {case.get('why', '')} {os_}: {parent!r}, expected {case['parent']!r}")
+            failures += 1
+        picked = lib.select(doc, "x.y", os_["family"], os_.get("id"), os_.get("versionID"), bundled=bundled,
+                            parent_id=parent, family_inherited=os_.get("familyInherited", False))
         got = picked["run"] if picked else None
         if got != case["pick"]:
             print(f"self-test FAIL: selection {case.get('why', '')} {os_}: {got!r}, expected {case['pick']!r}")
+            failures += 1
+    for case in cases["documents"]:
+        try:
+            lib.load(file_with("x.y", [{"families": ["apt"], "run": "a"}], {"idLike": case["idLike"]}))
+            got = "ok"
+        except lib.RecipeError:
+            got = "refused"
+        if got != case["result"]:
+            print(f"self-test FAIL: document idLike {case['idLike']!r}: {got}, expected {case['result']}")
             failures += 1
     return failures
 
@@ -381,6 +444,10 @@ def self_test():
         "schema 2": json.dumps(dict(base, schema=2)).encode(),
         "bool serial": json.dumps(dict(base, serial=True)).encode(),
         "bad date": json.dumps(dict(base, date="2026-13-01")).encode(),
+        "idLike not a list": json.dumps(dict(base, idLike="arch")).encode(),
+        "idLike bad token": json.dumps(dict(base, idLike=["Arch"])).encode(),
+        "idLike repeated": json.dumps(dict(base, idLike=["arch", "arch"])).encode(),
+        "idLike too long": json.dumps(dict(base, idLike=[f"d{i}" for i in range(17)])).encode(),
         "duplicate key": good.replace(b'"kind": "host-recipes",', b'"kind": "host-recipes", "kind": "host-recipes",', 1),
         "windows beside a POSIX family": intent_of("herdr.install", WIN_HERDR, families=["windows", "apt"]),
         "windows beside POSIX in any intent": intent_of("tmux.install", "echo x", families=["windows", "any"]),
@@ -503,6 +570,72 @@ def self_test():
             if ok:
                 print(f"self-test FAIL: declared check '{name}' failed: {error}")
                 failures += 1
+    # Serial 12: the top-level idLike is a declared change ({"kind": "idLike"}); a newly named inheritor too.
+    allowlist = json.loads(good)
+    allowlist["idLike"] = ["arch"]
+    current = lib.load(json.dumps(allowlist).encode())
+    top = {"kind": "idLike", "reason": "test"}
+    for name, declared, ok in [("idLike undeclared", {"changes": []}, False),
+                               ("idLike declared", {"changes": [top]}, True)]:
+        try:
+            check_declared(current, previous, {"intents": {}, "packages": {}}, declared)
+            if not ok:
+                print(f"self-test FAIL: declared check '{name}' passed")
+                failures += 1
+        except lib.RecipeError as error:
+            if ok:
+                print(f"self-test FAIL: declared check '{name}' failed: {error}")
+                failures += 1
+    try:
+        check_declared(previous, previous, {"intents": {}, "packages": {}}, {"changes": [top]})
+        print("self-test FAIL: a stale idLike declaration passed")
+        failures += 1
+    except lib.RecipeError:
+        pass
+    named = json.loads(good)
+    named["intents"]["tmux.install"].append({"families": ["unknown"], "ids": ["newderiv"], "run": "echo x"})
+    named_doc = lib.load(json.dumps(named).encode())
+    entry = {"intent": "tmux.install", "selector": {"families": ["unknown"], "ids": ["newderiv"]}, "reason": "test"}
+    for name, inheriting, declared, ok in [
+            ("named inheritor undeclared", {"newderiv"}, [entry], False),
+            ("named inheritor declared", {"newderiv"}, [entry, {"named": "newderiv", "reason": "meant"}], True),
+            ("named, not an inheritor", {"otherderiv"}, [entry], True),
+            ("named, no distros file", None, [entry], True),
+            ("stale named declaration", {"otherderiv"}, [entry, {"named": "newderiv", "reason": "x"}], False)]:
+        try:
+            check_declared(named_doc, previous, {"intents": {}, "packages": {}}, {"changes": declared}, inheriting)
+            if not ok:
+                print(f"self-test FAIL: declared check '{name}' passed")
+                failures += 1
+        except lib.RecipeError as error:
+            if ok:
+                print(f"self-test FAIL: declared check '{name}' failed: {error}")
+                failures += 1
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".json") as handle:
+        json.dump({"distros": [{"label": "a", "family": "unknown", "id": "manjaro", "idLike": ["arch"]},
+                               {"label": "b", "family": "unknown", "id": "artix"},
+                               {"label": "c", "family": "unknown", "id": "x", "idLike": []}]}, handle)
+        handle.flush()
+        if inheritors(handle.name) != {"manjaro"} or inheritors(handle.name + ".missing") is not None:
+            print("self-test FAIL: inheritors()")
+            failures += 1
+    # The parent's weights: an id 8, the parent 6 (never with a version range), a range 2, the family 1, any 0.
+    arch, ver = {"families": ["unknown"], "ids": ["arch"], "run": "x"}, {"min": "1"}
+    if lib.score(arch, "unknown", "arch") != 9 or lib.score(arch, "unknown", "x", None, "arch") != 7 \
+            or lib.score(dict(arch, families=["any"]), "unknown", "x", None, "arch") != 6 \
+            or lib.score(dict(arch, versions=ver), "unknown", "x", [2], "arch") is not None \
+            or lib.score(dict(arch, versions=ver), "unknown", "arch", [2]) != 11 \
+            or lib.score(arch, "unknown", "x", None, "debian") is not None:
+        print("self-test FAIL: score()'s parent weights")
+        failures += 1
+    # parent(): the token equal to the host's own id is skipped; no ID_LIKE, no parent; the classifier names count.
+    allow = {"idLike": ["arch", "debian"], "intents": {}}
+    if lib.parent(allow, "arch", ["arch"]) is not None or lib.parent(allow, "x", []) is not None \
+            or lib.parent(allow, "X", ["ARCH"]) != "arch" or lib.parent(allow, None, ["debian"]) != "debian" \
+            or lib.parent(allow, "alpine", ["arch"], lib.CONTAINERS_CLASSIFIER_IDS) is not None:
+        print("self-test FAIL: parent()")
+        failures += 1
     # The resolver: an id variant beats the family; a range needs a VERSION_ID.
     doc = lib.load(good)
     ubuntu = lib.select(doc, "compose.install-package", "apt", "ubuntu")
@@ -533,6 +666,9 @@ def main():
     parser.add_argument("--declared", help="a declared-changes file: every data change against the previous file "
                                            "(plus --baseline's new intents and package ids) must be listed there")
     parser.add_argument("--baseline", help="with --declared: the app's code text as a recipes file (new intents)")
+    parser.add_argument("--distros", default=DISTROS,
+                        help="with --declared: the compat hosts; a newly named id listed there with an idLike must "
+                             "be declared ({\"named\": id})")
     args = parser.parse_args()
     if args.self_test:
         return self_test()
@@ -560,7 +696,10 @@ def main():
                 baseline = lib.load(handle.read())
             with open(args.declared) as handle:
                 declared = json.load(handle)
-            count = check_declared(doc, lib.load(previous), baseline, declared)
+            inheriting = inheritors(args.distros)
+            if inheriting is None:
+                print(f"note: no {os.path.relpath(args.distros, ROOT)}: newly named inheritors are not checked")
+            count = check_declared(doc, lib.load(previous), baseline, declared, inheriting)
         except (lib.RecipeError, ValueError) as error:
             print(f"::error::declared changes: {error}")
             return 1
