@@ -32,7 +32,7 @@ FAMILIES = {"apt", "dnf", "yum", "apk", "pacman", "zypper", "macos", "unknown", 
 TOKEN = re.compile(r"^[a-z0-9-]{1,32}\Z")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9]{1,32}\Z")
 DISTRO_ID = re.compile(r"^[a-z0-9._-]{1,64}\Z")
-# Top-level `idLike` (serial 12, meshTerm 2.3.2): the parents a derivative may inherit recipe lines from through
+# Top-level `idLike` (serial 11, meshTerm 2.3.2): the parents a derivative may inherit recipe lines from through
 # os-release ID_LIKE. Absent or empty = inheritance off (the kill switch); older apps ignore the key.
 MAX_ID_LIKE = 16
 # The ids meshTerm's Containers classifier names in code (ContainerHostOS.family's lists). A distro named there, or by

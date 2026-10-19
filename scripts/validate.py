@@ -195,7 +195,7 @@ def selector_json(selector):
 
 
 # The top-level keys every file has (the serial and date change with every publish); any OTHER top-level key is data
-# an app may read (serial 12: `idLike`), so a change to it must be declared.
+# an app may read (serial 11: `idLike`), so a change to it must be declared.
 FIXED_TOP_LEVEL = {"kind", "schema", "serial", "date", "packages", "intents", lib.UNUSABLE}
 DISTROS = os.path.join(ROOT, "compat", "distros.json")
 
@@ -226,7 +226,7 @@ def data_changes(doc, expected):
 
 # From this serial on (the first with a top-level `idLike`), --declared needs compat/distros.json: without it a newly
 # named (or no longer named) inheritor would pass unnoticed.
-ID_LIKE_SERIAL = 12
+ID_LIKE_SERIAL = 11
 
 
 def inheritors(path=DISTROS):
@@ -618,7 +618,7 @@ def self_test():
             if ok:
                 print(f"self-test FAIL: declared check '{name}' failed: {error}")
                 failures += 1
-    # Serial 12: the top-level idLike is a declared change ({"kind": "idLike"}); a newly named inheritor too.
+    # Serial 11: the top-level idLike is a declared change ({"kind": "idLike"}); a newly named inheritor too.
     allowlist = json.loads(good)
     allowlist["idLike"] = ["arch"]
     current = lib.load(json.dumps(allowlist).encode())
@@ -688,11 +688,11 @@ def self_test():
         if inheritors(handle.name) != {"manjaro"} or inheritors(handle.name + ".missing") is not None:
             print("self-test FAIL: inheritors() (a classifier id such as linuxmint never counts)")
             failures += 1
-        # From serial 12 a --declared run without compat/distros.json fails; before it, a note.
+        # From serial 11 a --declared run without compat/distros.json fails; before it, a note.
         missing = handle.name + ".missing"
         try:
             declared_inheritors({"serial": ID_LIKE_SERIAL}, missing)
-            print("self-test FAIL: --declared on a serial-12 file without compat/distros.json passed")
+            print("self-test FAIL: --declared on a serial-11 file without compat/distros.json passed")
             failures += 1
         except lib.RecipeError:
             pass

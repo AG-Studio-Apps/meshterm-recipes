@@ -1,7 +1,7 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 12,
+  "serial": 11,
   "date": "2026-10-19",
   "idLike": ["arch", "debian", "ubuntu", "fedora"],
   "packages": {

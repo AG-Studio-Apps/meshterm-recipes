@@ -1,5 +1,5 @@
 {
- "_comment": "Every app-visible change serial 11 makes against serial 10 (scripts/validate.py --declared ci/serial11-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 10>).",
+ "_comment": "Every app-visible change serial 11 makes against serial 10 (scripts/validate.py --declared ci/serial11-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 10> --distros compat/distros.json; from serial 11 on --declared also needs compat/distros.json, the hosts whose ID_LIKE inheritance a newly named or no longer named id would change). Serial 12 (idLike, rootless Podman prerequisites for apt-family derivatives and Alpine) was folded into serial 11 before either was published (James 2026-10-19); meshTerm docs/container-idlike-alpine-plan.md, stage E and 9.11.",
  "changes": [
   {
    "intent": "agent.claude.install-official",
@@ -36,6 +36,28 @@
     ]
    },
    "reason": "Changed (serial 10 Opus review follow-up): use -LiteralPath for every Remove-Item on the downloaded installer ($f), so wildcard characters in the temporary path are treated literally. Every other byte of the Windows install line is unchanged."
+  },
+  {
+   "kind": "idLike",
+   "reason": "New top-level key: the parents a derivative may inherit through os-release ID_LIKE (arch, debian, ubuntu, fedora), read by meshTerm 2.3.2+ for the Containers intents only; absent or [] turns inheritance off. Older apps ignore unknown top-level keys (compat profiles app-2.3.0 and app-2.3.1). A host any intent or the app's classifier names never inherits."
+  },
+  {
+   "intent": "podman.rootless-prerequisites",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "Added (James 2026-10-19): a family-level apt line with no ids, so a Debian or Ubuntu derivative that inherits the apt family (elementary, Zorin, Mint-likes, Parrot, Devuan) gets the rootless Podman prerequisites when upstream has no line for its id (meshTerm 2.3.2's ADD path). It installs the missing packages (uidmap, slirp4netns) and passt only where the release has it (Podman 5 needs pasta; Ubuntu 22.04 has no passt). Every named apt distro keeps its own ids line (they score higher), so Debian, Ubuntu, Raspbian, Mint and Pop select exactly what they did; 2.3.0 and 2.3.1 never reach it (no inheritance, and their replace path only fires for the named ids). Verified as a non-root sudo user on debian:12, debian:13, ubuntu:22.04, ubuntu:24.04 and devuan/devuan (Devuan 6): rootless podman run fails before, passes after."
+  },
+  {
+   "intent": "podman.rootless-prerequisites",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "Added (meshTerm 2.3.2 plan 5.3): the Alpine safety net for the ADD path (upstream's RootlessRemediation has no Alpine line): shadow-uidmap (newuidmap/newgidmap) and slirp4netns, plus passt where the release has it (Podman 5 fails with slirp4netns alone: 'could not find pasta'; Alpine 3.18 has no passt). Only meshTerm 2.3.2 asks it on Alpine; 2.3.0 and 2.3.1 never do. Verified as a non-root sudo user on alpine:3.18, 3.20 and 3 (3.24), run twice (idempotent), then rootless podman run."
   }
  ]
 }

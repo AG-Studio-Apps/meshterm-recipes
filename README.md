@@ -97,7 +97,7 @@ foreground, at most every 12 hours (1 hour after a failure).
   in one intent moves EVERY intent of it off its parent's lines: `validate.py --declared` requires
   `{"named": "<id>"}` for an id `compat/distros.json` lists with an `idLike` (classifier ids aside), `{"unnamed": "<id>"}`
   for one that is no longer named (it starts inheriting), and a change to `idLike` itself is declared as
-  `{"kind": "idLike"}`. From serial 12 a `--declared` run without `compat/distros.json` (or `--distros`) FAILS.
+  `{"kind": "idLike"}`. From serial 11 a `--declared` run without `compat/distros.json` (or `--distros`) FAILS.
   Engine-side guard (in the app, not the data): meshTerm asks `recipes_lib.SYSTEMD_INHERITANCE`
   (`engine.docker.rootless-prepare`) WITHOUT the host's ID_LIKE unless its probe saw systemd, so Devuan never gets
   the inherited apt preparation (it installs `dbus-user-session`, which Devuan 6 has no candidate for).
