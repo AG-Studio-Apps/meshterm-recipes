@@ -61,6 +61,23 @@ SUDO_SETUP = {
               "&& useradd -m -s /bin/sh mt",
     "zypper": "{ command -v sudo >/dev/null || zypper -n -q install sudo >/dev/null; } && useradd -m -s /bin/sh mt",
 }
+# An Arch DERIVATIVE's image (Manjaro, CachyOS) can lag its own repositories further than archlinux:latest: a partial
+# upgrade (`-Sy sudo`) may pull a sudo built against newer libraries than the image has, so a derivative upgrades
+# fully (-Syu) before sudo (meshTerm docs/container-idlike-alpine-plan.md 9.2, review 13). archlinux:latest keeps -Sy.
+SUDO_SETUP_DERIVATIVE = {
+    "pacman": "pacman -Syu --noconfirm --needed sudo >/dev/null && rm -f /var/lib/pacman/sync/*.db "
+              "&& useradd -m -s /bin/sh mt",
+}
+# The distro ids whose image is the family's own (SUDO_SETUP); any other id with that native family is a derivative.
+FAMILY_OWN_IDS = {"pacman": {"arch", "archlinux"}}
+
+
+def sudo_setup(native, distro_id):
+    """The harness's sudo set-up for an image: SUDO_SETUP, or SUDO_SETUP_DERIVATIVE for a derivative of a family that
+    has one (an Arch derivative)."""
+    if native in SUDO_SETUP_DERIVATIVE and distro_id not in FAMILY_OWN_IDS.get(native, ()):
+        return SUDO_SETUP_DERIVATIVE[native]
+    return SUDO_SETUP[native]
 
 
 def parse_os_release(text):
@@ -173,7 +190,7 @@ def plan(doc, matrix, args):
                                          packages=packages, port=ci.get("port"), proto=ci.get("proto"),
                                          group=ci.get("group"), path=ci.get("path"))
                     yield dict(image=image, mode=mode, family=family, intent=intent, variant=variant, native=native,
-                               command=command, skip=why)
+                               distro=distro_id, command=command, skip=why)
 
 
 def run_case(doc, case):
@@ -181,9 +198,9 @@ def run_case(doc, case):
     lines = ["set -e", "export DEBIAN_FRONTEND=noninteractive"]
     if case["mode"] == "su":
         # No sudoers entry: root's password (emptied here, so su asks for nothing) is the way to root.
-        lines += [SUDO_SETUP[case["native"]], "passwd -d root >/dev/null"]
+        lines += [sudo_setup(case["native"], case.get("distro")), "passwd -d root >/dev/null"]
     if case["mode"] == "user":
-        lines += [SUDO_SETUP[case["native"]],
+        lines += [sudo_setup(case["native"], case.get("distro")),
                   "echo 'mt ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/mt",
                   "echo 'Defaults env_keep += \"DEBIAN_FRONTEND\"' >> /etc/sudoers.d/mt",
                   "chmod 0440 /etc/sudoers.d/mt"]
@@ -269,6 +286,14 @@ def self_test():
                   for c in cases({"image": "t/devuan", "id": "devuan", "idLike": ["debian"], "systemd": systemd}))
         if got != want:
             print(f"self-test FAIL: devuan systemd={systemd}: apt rootless preparation {got}, expected {want}")
+            failures += 1
+    # An Arch derivative's sudo set-up upgrades fully; archlinux:latest's and every other family's is unchanged.
+    for native, distro, want in [("pacman", "manjaro", SUDO_SETUP_DERIVATIVE["pacman"]),
+                                 ("pacman", "cachyos", SUDO_SETUP_DERIVATIVE["pacman"]),
+                                 ("pacman", "arch", SUDO_SETUP["pacman"]), ("pacman", "archlinux", SUDO_SETUP["pacman"]),
+                                 ("apt", "devuan", SUDO_SETUP["apt"]), ("apk", "alpine", SUDO_SETUP["apk"])]:
+        if sudo_setup(native, distro) != want:
+            print(f"self-test FAIL: sudo_setup({native!r}, {distro!r})")
             failures += 1
     print("self-test:", "OK" if not failures else f"{failures} FAILED")
     return 1 if failures else 0
