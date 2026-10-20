@@ -2,7 +2,9 @@
 """Run every recipe on fresh distro containers and check the result.
 
 For each image in ci/images.json, each recipe family tested there and each intent, the harness picks the variant
-the app would pick for that image (`recipes_lib.select`, from the image's /etc/os-release ID and VERSION_ID),
+the app would pick for that image (`recipes_lib.select`, from the image's /etc/os-release ID and VERSION_ID, and, for
+the Containers intents only (`recipes_lib.ID_LIKE_INTENTS`), the parent its ID_LIKE inherits through the file's
+top-level `idLike` and, on an `unknown` pass, the parent's family, as meshTerm 2.3.2 resolves them: `recipe_os`),
 renders it the way the app does, and runs it in a FRESH container (one at a time, `docker run --rm`):
 
   root   the bare form (no sudo), as root, on the untouched image (empty package lists and all).
@@ -16,7 +18,8 @@ then runs the variant's `ci.check` as root (MT_USER names the user the recipe ra
 what to skip (`skip`, `skipOn`, `rootOnly`, `userOnly`), what to install first as root (`needs`, ids from the
 packages table; `before`, a shell line), the `{{packages}}` value (`packages`; packages.install uses every name for
 the image's family) and which images are known to fail (`xfail`, reported, never red; an XPASS asks for the entry
-to go).
+to go). An xfail may carry the message it was measured with (ci/xfail-expect.json, intent -> image -> regular
+expression): then it passes only when the failing case's output matches it, and any other failure there is a FAIL.
 
     scripts/run-recipes.py                               # the whole matrix (slow: one container per case)
     scripts/run-recipes.py --image debian:12 --mode root # a slice
@@ -29,6 +32,7 @@ Exit status 1 when any case FAILs (an unexpected failure, or a check that does n
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -45,6 +49,7 @@ TAIL_LINES = 30
 # The image's own package-manager family (for `needs` and the sudo set-up), from os-release ID / ID_LIKE.
 NATIVE = {"debian": "apt", "ubuntu": "apt", "fedora": "dnf", "rocky": "dnf", "rockylinux": "dnf", "rhel": "dnf", "almalinux": "dnf",
           "centos": "dnf", "alpine": "apk", "amzn": "dnf", "amazonlinux": "dnf", "arch": "pacman", "archlinux": "pacman",
+          "manjaro": "pacman", "cachyos": "pacman",
           "opensuse-leap": "zypper", "opensuse": "zypper", "leap": "zypper", "opensuse-tumbleweed": "zypper"}
 SUDO_SETUP = {
     "apt": "apt-get update -qq && apt-get install -y -qq sudo >/dev/null && rm -rf /var/lib/apt/lists/* "
@@ -58,17 +63,84 @@ SUDO_SETUP = {
               "&& useradd -m -s /bin/sh mt",
     "zypper": "{ command -v sudo >/dev/null || zypper -n -q install sudo >/dev/null; } && useradd -m -s /bin/sh mt",
 }
+# An Arch DERIVATIVE's image (Manjaro, CachyOS) can lag its own repositories further than archlinux:latest: a partial
+# upgrade (`-Sy sudo`) may pull a sudo built against newer libraries than the image has, so a derivative upgrades
+# fully (-Syu) before sudo (meshTerm docs/container-idlike-alpine-plan.md 9.2, review 13). archlinux:latest keeps -Sy.
+SUDO_SETUP_DERIVATIVE = {
+    "pacman": "pacman -Syu --noconfirm --needed sudo >/dev/null && rm -f /var/lib/pacman/sync/*.db "
+              "&& useradd -m -s /bin/sh mt",
+}
+# The distro ids whose image is the family's own (SUDO_SETUP); any other id with that native family is a derivative.
+FAMILY_OWN_IDS = {"pacman": {"arch", "archlinux"}}
+
+
+def load_xfail_expect(doc, path=None):
+    """ci/xfail-expect.json's `expect` (intent -> image -> compiled pattern). Raises ValueError for an entry no
+    variant's `ci.xfail` backs (a typo would otherwise never be consulted) or a pattern that does not compile."""
+    path = path or os.path.join(ROOT, "ci", "xfail-expect.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path) as handle:
+        expect = json.load(handle).get("expect", {})
+    compiled = {}
+    for intent, images in expect.items():
+        variants = doc["intents"].get(intent)
+        if variants is None:
+            raise ValueError(f"{path}: unknown intent {intent!r}")
+        for image, pattern in images.items():
+            if not any(image in v.get("ci", {}).get("xfail", {}) for v in variants):
+                raise ValueError(f"{path}: {intent} on {image}: no variant of that intent marks it xfail")
+            try:
+                compiled.setdefault(intent, {})[image] = re.compile(pattern, re.MULTILINE)
+            except re.error as error:
+                raise ValueError(f"{path}: {intent} on {image}: bad pattern {pattern!r} ({error})") from None
+    return compiled
+
+
+def classify(code, output, xfail, expected=None, check=""):
+    """A finished case's (status, note). `xfail` is the variant's reason for the image (or None), `expected` its
+    compiled ci/xfail-expect.json pattern (or None): an xfail with a pattern holds only when the output matches."""
+    if code == 0:
+        return ("XPASS", f"passes now: remove its xfail ({xfail})") if xfail else ("PASS", "")
+    why = {10: "the recipe failed", 11: "the check failed: " + check, 124: "timed out"}.get(code, f"exit {code}")
+    if not xfail:
+        return "FAIL", why
+    if expected is not None and not expected.search(output):
+        return "FAIL", f"{why}, but not as expected (xfail needs output matching {expected.pattern!r}: {xfail})"
+    return "XFAIL", xfail
+
+
+def sudo_setup(native, distro_id):
+    """The harness's sudo set-up for an image: SUDO_SETUP, or SUDO_SETUP_DERIVATIVE for a derivative of a family that
+    has one (an Arch derivative)."""
+    if native in SUDO_SETUP_DERIVATIVE and distro_id not in FAMILY_OWN_IDS.get(native, ()):
+        return SUDO_SETUP_DERIVATIVE[native]
+    return SUDO_SETUP[native]
+
+
+def parse_os_release(text):
+    """os-release's fields as a shell that sources it reads them (the app's probe does `. /etc/os-release`): each
+    value is one shell word, so single and double quotes and backslash escapes are removed (shlex). A line shlex
+    cannot read (an unclosed quote) or that is not KEY=value is skipped. Returns (ID, VERSION_ID, ID_LIKE tokens)."""
+    fields = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        try:
+            words = shlex.split(value, comments=True)
+        except ValueError:
+            continue
+        fields[key.strip()] = " ".join(words)
+    return (fields.get("ID", "").lower(), fields.get("VERSION_ID") or None,
+            fields.get("ID_LIKE", "").lower().split())
 
 
 def os_release(image):
     out = subprocess.run(["docker", "run", "--rm", image, "cat", "/etc/os-release"], check=True,
                          capture_output=True, text=True, timeout=600).stdout
-    fields = {}
-    for line in out.splitlines():
-        if "=" in line:
-            key, value = line.split("=", 1)
-            fields[key] = value.strip().strip('"')
-    return fields.get("ID", "").lower(), fields.get("VERSION_ID")
+    return parse_os_release(out)
 
 
 def packages_for(doc, variant, intent, native):
@@ -100,27 +172,39 @@ def plan(doc, matrix, args):
         image = entry["image"]
         if args.image and image not in args.image:
             continue
-        distro_id, version_id = entry.get("id"), entry.get("versionID")
+        distro_id, version_id, id_like = entry.get("id"), entry.get("versionID"), entry.get("idLike", [])
         if distro_id is None and not args.list:
             try:
-                distro_id, version_id = os_release(image)
+                distro_id, version_id, id_like = os_release(image)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                 print(f"FAIL  {image}: cannot read /etc/os-release ({error})", flush=True)
                 yield dict(image=image, mode="-", family="-", intent="(image)", variant={"ci": {}}, native="",
                            command=None, skip=None)
                 continue
-        native = NATIVE.get(distro_id or image.split(":")[0].split("/")[-1], "")
+        distro_id = distro_id or image.split(":")[0].split("/")[-1]
+        # A derivative the table does not list: its first ID_LIKE token the table knows (Garuda -> arch -> pacman).
+        native = NATIVE.get(distro_id) or next((NATIVE[t] for t in id_like if t in NATIVE), "")
         for family in entry["families"]:
             for intent in sorted(doc["intents"]):
                 if args.intent and intent not in args.intent:
                     continue
-                variant = lib.select(doc, intent, family, distro_id or image.split(":")[0].split("/")[-1], version_id)
+                # Only the intents meshTerm asks with the ID_LIKE parent (lib.ID_LIKE_INTENTS) get it, and with it
+                # the parent's family on an `unknown` pass (meshTerm 2.3.2's Containers recipe OS, lib.recipe_os).
+                # An image with no systemd (`"systemd": false`, Devuan) asks lib.SYSTEMD_INHERITANCE without its
+                # ID_LIKE, as the app does (ContainerHostFixes.systemdInheritance): never the inherited apt
+                # rootless preparation, which needs dbus-user-session.
+                tokens = [] if entry.get("systemd") is False and intent in lib.SYSTEMD_INHERITANCE else id_like
+                selected, parent, inherited = lib.recipe_os(doc, intent, family, distro_id, tokens,
+                                                            lib.CONTAINERS_CLASSIFIER_IDS,
+                                                            lib.CONTAINERS_PARENT_FAMILIES)
+                variant = lib.select(doc, intent, selected, distro_id, version_id, parent_id=parent,
+                                     family_inherited=inherited)
                 if variant is None:
                     continue
                 if family == "any" or "any" in variant["families"]:
                     if family != "any":
                         continue  # an `any` line is tested once per image, in the `any` pass
-                elif family not in variant["families"]:
+                elif selected not in variant["families"]:
                     continue
                 ci = variant.get("ci", {})
                 modes = ("root", "user") + (("su",) if entry.get("suMode") and ci.get("su") else ())
@@ -144,7 +228,7 @@ def plan(doc, matrix, args):
                                          packages=packages, port=ci.get("port"), proto=ci.get("proto"),
                                          group=ci.get("group"), path=ci.get("path"))
                     yield dict(image=image, mode=mode, family=family, intent=intent, variant=variant, native=native,
-                               command=command, skip=why)
+                               distro=distro_id, command=command, skip=why)
 
 
 def run_case(doc, case):
@@ -152,9 +236,9 @@ def run_case(doc, case):
     lines = ["set -e", "export DEBIAN_FRONTEND=noninteractive"]
     if case["mode"] == "su":
         # No sudoers entry: root's password (emptied here, so su asks for nothing) is the way to root.
-        lines += [SUDO_SETUP[case["native"]], "passwd -d root >/dev/null"]
+        lines += [sudo_setup(case["native"], case.get("distro")), "passwd -d root >/dev/null"]
     if case["mode"] == "user":
-        lines += [SUDO_SETUP[case["native"]],
+        lines += [sudo_setup(case["native"], case.get("distro")),
                   "echo 'mt ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/mt",
                   "echo 'Defaults env_keep += \"DEBIAN_FRONTEND\"' >> /etc/sudoers.d/mt",
                   "chmod 0440 /etc/sudoers.d/mt"]
@@ -204,6 +288,95 @@ def tail(output, lines=TAIL_LINES):
     return "\n".join("      | " + line for line in kept) if kept else "      | (no output)"
 
 
+def self_test():
+    """parse_os_release against what `. /etc/os-release` gives a shell."""
+    failures = 0
+    for text, want in [
+            ('ID=arch\nVERSION_ID=1\n', ("arch", "1", [])),
+            ('ID="rocky"\nID_LIKE="rhel centos fedora"\nVERSION_ID="9.8"\n', ("rocky", "9.8", ["rhel", "centos", "fedora"])),
+            ("ID='elementary'\nID_LIKE='ubuntu debian'\n", ("elementary", None, ["ubuntu", "debian"])),
+            ('ID=Kali\nID_LIKE=debian # comment\n', ("kali", None, ["debian"])),
+            ('# a comment\n\nID=x\nID_LIKE="a \\"b\\""\nVERSION_ID=\n', ("x", None, ["a", '"b"'])),
+            ('ID="unclosed\nID_LIKE=arch\n', ("", None, ["arch"])),
+            ('  ID=mageia\nID_LIKE="mandriva fedora"\n', ("mageia", None, ["mandriva", "fedora"]))]:
+        got = parse_os_release(text)
+        if got != want:
+            print(f"self-test FAIL: parse_os_release({text!r}): {got!r}, expected {want!r}")
+            failures += 1
+    # The Containers recipe OS with a draft idLike: a Fedora derivative's sudo lines render `wheel` (the dnf line's
+    # ci.group), and an image row without systemd (Devuan) never gets the inherited apt rootless preparation.
+    with open(os.path.join(ROOT, "recipes.json"), "rb") as handle:
+        raw = json.loads(handle.read())
+    raw["idLike"] = ["arch", "debian", "ubuntu", "fedora"]
+    doc = lib.load(json.dumps(raw).encode())
+    args = argparse.Namespace(image=None, intent=None, mode=None, list=True)
+
+    def cases(entry):
+        return [c for c in plan(doc, {"images": [dict(entry, families=["unknown"])]}, args) if c["command"]]
+
+    grant = [c["command"] for c in cases({"image": "t/ultramarine", "id": "ultramarine", "idLike": ["fedora"]})
+             if c["intent"] in ("sudo.grant", "sudo.install")]
+    if not grant or not all("-aG wheel " in c and "-aG sudo " not in c for c in grant):
+        print(f"self-test FAIL: a fedora-parented host's sudo lines: {grant!r}")
+        failures += 1
+    for systemd, want in [(True, True), (False, False)]:
+        got = any(c["intent"] == "engine.docker.rootless-prepare" and "dbus-user-session" in c["command"]
+                  for c in cases({"image": "t/devuan", "id": "devuan", "idLike": ["debian"], "systemd": systemd}))
+        if got != want:
+            print(f"self-test FAIL: devuan systemd={systemd}: apt rootless preparation {got}, expected {want}")
+            failures += 1
+    # An Arch derivative's sudo set-up upgrades fully; archlinux:latest's and every other family's is unchanged.
+    for native, distro, want in [("pacman", "manjaro", SUDO_SETUP_DERIVATIVE["pacman"]),
+                                 ("pacman", "cachyos", SUDO_SETUP_DERIVATIVE["pacman"]),
+                                 ("pacman", "arch", SUDO_SETUP["pacman"]), ("pacman", "archlinux", SUDO_SETUP["pacman"]),
+                                 ("apt", "devuan", SUDO_SETUP["apt"]), ("apk", "alpine", SUDO_SETUP["apk"])]:
+        if sudo_setup(native, distro) != want:
+            print(f"self-test FAIL: sudo_setup({native!r}, {distro!r})")
+            failures += 1
+    # An xfail with an expected message holds only for that failure; without one, any failure is the xfail.
+    devuan = re.compile("Unsupported distribution 'devuan'", re.MULTILINE)
+    for code, output, xfail, expected, want in [
+            (10, "x\nERROR: Unsupported distribution 'devuan'\n--- recipe exit 1", "why", devuan, "XFAIL"),
+            (10, "curl: (6) Could not resolve host: get.docker.com\n--- recipe exit 6", "why", devuan, "FAIL"),
+            (11, "", "why", devuan, "FAIL"),
+            (124, "timed out", "why", devuan, "FAIL"),
+            (10, "anything", "why", None, "XFAIL"),
+            (0, "", "why", devuan, "XPASS"),
+            (10, "Unsupported distribution 'devuan'", None, None, "FAIL"),
+            (0, "", None, None, "PASS")]:
+        got = classify(code, output, xfail, expected, "check")[0]
+        if got != want:
+            print(f"self-test FAIL: classify({code}, {output!r}, xfail={xfail!r}, expected={expected and expected.pattern!r}): {got}, expected {want}")
+            failures += 1
+    # The repository's own ci/xfail-expect.json loads (every entry backed by an xfail), and a stray entry is refused.
+    try:
+        real = load_xfail_expect(lib.load(open(os.path.join(ROOT, "recipes.json"), "rb").read()))
+        if "devuan/devuan:latest" not in real.get("engine.docker.install-script", {}):
+            print("self-test FAIL: ci/xfail-expect.json has no Devuan get.docker.com pattern")
+            failures += 1
+    except ValueError as error:
+        print(f"self-test FAIL: ci/xfail-expect.json: {error}")
+        failures += 1
+    with tempfile.TemporaryDirectory() as tmp:
+        for body, ok in [({"expect": {"engine.docker.install-script": {"debian:12": "x"}}}, False),
+                         ({"expect": {"no.such.intent": {"debian:12": "x"}}}, False),
+                         ({"expect": {"engine.docker.install-script": {"devuan/devuan:latest": "("}}}, False),
+                         ({"expect": {"engine.docker.install-script": {"devuan/devuan:latest": "x"}}}, True)]:
+            stray = os.path.join(tmp, "expect.json")
+            with open(stray, "w") as handle:
+                json.dump(body, handle)
+            try:
+                load_xfail_expect(doc, stray)
+                refused = False
+            except ValueError:
+                refused = True
+            if refused == ok:
+                print(f"self-test FAIL: load_xfail_expect({body!r}): refused={refused}")
+                failures += 1
+    print("self-test:", "OK" if not failures else f"{failures} FAILED")
+    return 1 if failures else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--image", action="append")
@@ -211,11 +384,19 @@ def main():
     parser.add_argument("--mode", choices=("root", "user", "su"))
     parser.add_argument("--list", action="store_true", help="print the cases, run nothing")
     parser.add_argument("--summary", help="append a Markdown table here (GITHUB_STEP_SUMMARY)")
+    parser.add_argument("--self-test", action="store_true", help="test the os-release parser, the xfail patterns and exit")
     args = parser.parse_args()
+    if args.self_test:
+        return self_test()
     with open(os.path.join(ROOT, "recipes.json"), "rb") as handle:
         doc = lib.load(handle.read())
     with open(os.path.join(ROOT, "ci", "images.json")) as handle:
         matrix = json.load(handle)
+    try:
+        expect = load_xfail_expect(doc)
+    except ValueError as error:
+        print(f"FAIL  {error}")
+        return 1
 
     rows, failed, failures = [], 0, []
     for case in plan(doc, matrix, args):
@@ -233,15 +414,10 @@ def main():
             print(f"RUN   {label}\n      {case['command']}")
             continue
         code, output, seconds = run_case(doc, case)
-        xfail = case["variant"]["ci"].get("xfail", {}).get(case["image"])
-        if code == 0:
-            status, note = ("XPASS", f"passes now: remove its xfail ({xfail})") if xfail else ("PASS", "")
-        else:
-            why = {10: "the recipe failed", 11: "the check failed: " + case["variant"]["ci"]["check"],
-                   124: "timed out"}.get(code, f"exit {code}")
-            status, note = ("XFAIL", xfail) if xfail else ("FAIL", why)
-            if status == "FAIL":
-                failed += 1
+        status, note = classify(code, output, case["variant"]["ci"].get("xfail", {}).get(case["image"]),
+                                expect.get(case["intent"], {}).get(case["image"]), case["variant"]["ci"]["check"])
+        if status == "FAIL":
+            failed += 1
         rows.append((case, status, note))
         print(f"{status:<5} {label} ({seconds:.0f} s){': ' + note if note else ''}", flush=True)
         if status == "FAIL":

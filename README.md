@@ -54,7 +54,8 @@ foreground, at most every 12 hours (1 hour after a failure).
   the line must pick a package manager at run time), `any` (init-system lines such as `systemctl`).
 - **ids** (optional): `/etc/os-release` `ID` values. **versions** (optional): `{"min": "22.04", "below": "24.04"}`
   over `VERSION_ID` (min inclusive, below exclusive). The most specific matching variant wins: ids and versions,
-  then ids, then versions, then the family, then `any`; file order breaks a tie. Today only the agents' checks know
+  then ids, then the inherited parent's ids (`idLike` below), then versions, then the family, then `any`; file order
+  breaks a tie. Today only the agents' checks know
   a host's VERSION_ID; the tmux and Containers checks know the ID only, so a version-ranged line needs an id- or
   family-level line beside it.
 - **run**: one line of printable ASCII, at most 2,000 characters. Placeholders, and only these:
@@ -73,6 +74,35 @@ foreground, at most every 12 hours (1 hour after a failure).
   variant would be chosen (it scores at least as high as the best usable one), the app uses its bundled line for that
   intent and OS. Every security rule (privilege words, ASCII, placement of the known placeholders, selectors) still
   refuses the whole file.
+- **idLike** (optional, top level; meshTerm 2.3.2+, older apps ignore it): the parents an unnamed derivative may
+  inherit lines from through os-release `ID_LIKE`, e.g. `["arch", "debian", "ubuntu", "fedora"]` (distinct ids, at
+  most 16). Absent or `[]` turns inheritance off: that is the kill switch, and narrowing the list is how a bad
+  inheritance is undone (a hosted file need not keep the bundled file's list). A distro named by ANY variant's `ids`,
+  or by the app's own classifier (`recipes_lib.CONTAINERS_CLASSIFIER_IDS`), never inherits. Otherwise the `ID_LIKE`
+  tokens are walked in order: a token on the list is the parent; a FAMILY ROOT off the list
+  (`recipes_lib.ID_LIKE_FAMILY_ROOTS`: alpine, arch, centos, debian, fedora, gentoo, mandriva, opensuse, rhel,
+  slackware, suse, ubuntu; the app holds the same list) stops the walk and the host gets no parent; any other token
+  (a named derivative such as `linuxmint`, or an id nobody recognises) is skipped. So `ID_LIKE="linuxmint ubuntu"`
+  inherits `ubuntu` and `ID_LIKE="rhel centos fedora"` inherits nothing while `rhel` is off the list. The parent is
+  resolved from the file in use (the id and the tokens trimmed and lower-cased), and an `ids` line
+  naming it matches as 6 (between an id match, 8, and a version range, 2) but only without `versions`; an intent with
+  a versioned line naming the parent does not use the parent at all. With the parent, a host whose own family is
+  `unknown` also takes the parent's recipe FAMILY (`recipes_lib.CONTAINERS_PARENT_FAMILIES`, the app classifier's
+  families: debian/ubuntu -> apt, fedora -> dnf, alpine -> apk; arch has none and stays `unknown`), so family-level
+  lines apply (elementary -> the apt lines), except version-only ones (their range is the family's distributions').
+  The family is resolved with the parent, from the same file, so `"idLike": []` turns both off. The parent applies ONLY to the intents
+  `recipes_lib.ID_LIKE_INTENTS` lists (meshTerm 2.3.2: the Containers intents, `engine.*`, `compose.*`, `podman.*`,
+  `git.install`, `ca-certificates.install`, `sudo.install`, `sudo.grant`; tmux, agents, packages, sshd, firewall and
+  the rest follow in 2.3.3); the format cases' `idLikeIntents` pins the app to the same list. So naming a derivative
+  in one intent moves EVERY intent of it off its parent's lines: `validate.py --declared` requires
+  `{"named": "<id>"}` for an id `compat/distros.json` lists with an `idLike` (classifier ids aside), `{"unnamed": "<id>"}`
+  for one that is no longer named (it starts inheriting), and a change to `idLike` itself is declared as
+  `{"kind": "idLike"}`. From serial 11 a `--declared` run without `compat/distros.json` (or `--distros`) FAILS.
+  Engine-side guard (in the app, not the data): meshTerm asks `recipes_lib.SYSTEMD_INHERITANCE`
+  (`engine.docker.rootless-prepare`) WITHOUT the host's ID_LIKE unless its probe saw systemd, so Devuan never gets
+  the inherited apt preparation (it installs `dbus-user-session`, which Devuan 6 has no candidate for).
+  `run-recipes.py` mirrors it for an image row with `"systemd": false`. The sudo recipes' `{{group}}` follows the
+  family the line was selected by (a Fedora derivative on the dnf line: `wheel`), as the variant's `ci.group` does.
 - **admin** (optional): needs an administrator even without `{{sudo}}` (Docker's install script, which asks for
   sudo itself).
 - **packages**: package id -> family -> name, for `packages.install`. A family with no entry needs nothing.
@@ -80,7 +110,8 @@ foreground, at most every 12 hours (1 hour after a failure).
   `$MT_USER` is the user it ran as) or `skip` (why it cannot run in a container), and optionally `needs` (package ids
   installed first, as root), `before` (a shell line run first, as root), `packages` (the `{{packages}}` value),
   `rootOnly` / `userOnly` (why one pass is skipped), `skipOn` and `xfail` (image -> reason; an xfail is reported, never
-  red, and an XPASS asks for the entry to go), and `port`, `proto`, `group`, `path` (the values to render with).
+  red, and an XPASS asks for the entry to go; `ci/xfail-expect.json` can pin the message an xfail was measured with,
+  intent -> image -> regular expression, and then any other failure there is red), and `port`, `proto`, `group`, `path` (the values to render with).
   `{{user}}` renders as the case's own user (`mt` in the sudo-user pass, `root` in the root pass).
 - **Agent and herdr lines** (`agent.*`, `herdr.install`; `scripts/validate.py`): no `{{sudo}}` or `admin`, https URLs
   only, never `/tmp` or a download piped into a shell; an official installer is downloaded with

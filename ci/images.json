@@ -1,5 +1,5 @@
 {
-  "_comment": "The fresh-distro matrix scripts/run-recipes.py runs every recipe on. `families`: the recipe families tested on the image (its own, plus `unknown` for the run-time-detecting lines and `any` for init-system lines). Keep the image list in step with .github/workflows/test-recipes.yml. `suMode`: also run the variants marked `ci.su` in the su -c form (the app's form for a host with no sudo), from the user's login shell.",
+  "_comment": "The fresh-distro matrix scripts/run-recipes.py runs every recipe on. `families`: the recipe families tested on the image (its own, plus `unknown` for the run-time-detecting lines and `any` for init-system lines). Keep the image list in step with .github/workflows/test-recipes.yml. `suMode`: also run the variants marked `ci.su` in the su -c form (the app's form for a host with no sudo), from the user's login shell. `systemd`: false for an image whose init is not systemd (a Devuan image): the harness then asks recipes_lib.SYSTEMD_INHERITANCE (engine.docker.rootless-prepare) WITHOUT the image's ID_LIKE, as meshTerm does (ContainerHostFixes.systemdInheritance), so the inherited apt line (dbus-user-session, no candidate on Devuan 6) is never run there. Derivative rows (manjarolinux/base, cachyos/cachyos, devuan/devuan; meshTerm docs/container-idlike-alpine-plan.md stage E) test only the `unknown` pass: the lines a derivative gets by its own id or through ID_LIKE (the file's top-level `idLike` and the parent's family, as meshTerm 2.3.2 resolves them); the `any` lines are the same text for every host and are proved on the other images.",
   "images": [
     {
       "image": "debian:12",
@@ -80,6 +80,25 @@
         "unknown",
         "any"
       ]
+    },
+    {
+      "image": "manjarolinux/base:latest",
+      "families": [
+        "unknown"
+      ]
+    },
+    {
+      "image": "cachyos/cachyos:latest",
+      "families": [
+        "unknown"
+      ]
+    },
+    {
+      "image": "devuan/devuan:latest",
+      "families": [
+        "unknown"
+      ],
+      "systemd": false
     }
   ]
 }

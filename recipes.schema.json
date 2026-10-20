@@ -10,6 +10,11 @@
     "schema": {"const": 1},
     "serial": {"type": "integer", "minimum": 1, "description": "Monotonic. Every change takes the next serial; the app refuses a lower one, and the same one with other bytes."},
     "date": {"type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"},
+    "idLike": {
+      "type": "array", "maxItems": 16, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9._-]{1,64}$"},
+      "description": "meshTerm 2.3.2+ (older apps ignore it): the parents an unnamed derivative may inherit lines from through os-release ID_LIKE. Absent or empty: inheritance off. A distro named by any variant's ids (or the app's classifier) never inherits; otherwise ID_LIKE is walked in order: a token on this list is the parent, a family root off it (rhel, centos, suse, ...) stops with no parent, any other token is skipped; and an ids line naming it (without versions) applies between an id match and a version range."
+    },
     "packages": {
       "type": "object",
       "description": "Package id (the app's HostPackage) -> family -> package name. A family with no entry needs nothing.",

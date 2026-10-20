@@ -32,6 +32,40 @@ FAMILIES = {"apt", "dnf", "yum", "apk", "pacman", "zypper", "macos", "unknown", 
 TOKEN = re.compile(r"^[a-z0-9-]{1,32}\Z")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9]{1,32}\Z")
 DISTRO_ID = re.compile(r"^[a-z0-9._-]{1,64}\Z")
+# Top-level `idLike` (serial 11, meshTerm 2.3.2): the parents a derivative may inherit recipe lines from through
+# os-release ID_LIKE. Absent or empty = inheritance off (the kill switch); older apps ignore the key.
+MAX_ID_LIKE = 16
+# The ids meshTerm's Containers classifier names in code (ContainerHostOS.family's lists). A distro named there, or by
+# any variant's `ids`, never inherits (docs/container-idlike-alpine-plan.md 9.2). Passed to `parent` explicitly.
+CONTAINERS_CLASSIFIER_IDS = ("ubuntu", "debian", "raspbian", "linuxmint", "pop", "fedora", "rhel", "centos", "rocky",
+                             "almalinux", "alpine")
+# The recipe family meshTerm's Containers classifier gives each of those ids (ContainerHostOS.parentFamilies, the 2.3.2
+# compat profile's `parentFamilies`): when a parent resolves for a host whose own family is `unknown`, the lookup takes
+# the parent's family from here (`recipe_os`; docs/container-idlike-alpine-plan.md 9.5, stage C). A parent with no
+# entry (arch) leaves the family `unknown`.
+CONTAINERS_PARENT_FAMILIES = {**{i: "apt" for i in ("ubuntu", "debian", "raspbian", "linuxmint", "pop")},
+                              **{i: "dnf" for i in ("fedora", "rhel", "centos", "rocky", "almalinux")},
+                              "alpine": "apk"}
+# The ID_LIKE family roots (HostRecipeDocument.idLikeFamilyRoots, the same list): os-release ID_LIKE values that name a
+# distribution FAMILY a derivative is built on, not a derivative. While resolving a parent, a root that is not on the
+# document's `idLike` allowlist is RECOGNISED-BUT-EXCLUDED: the walk stops there and the host gets no parent
+# (`ID_LIKE="rhel centos fedora"` stays generic). Every other token off the allowlist (a named derivative such as
+# linuxmint, or an id nobody recognises) is skipped. ci/format-cases.json's `familyRoots` pins both twins to it.
+ID_LIKE_FAMILY_ROOTS = frozenset({"alpine", "arch", "centos", "debian", "fedora", "gentoo", "mandriva", "opensuse",
+                                  "rhel", "slackware", "suse", "ubuntu"})
+# The intents a parent applies to (HostRecipeIntent.idLikePatterns, the same list): in meshTerm 2.3.2 ONLY the
+# Containers intents (James 2026-10-19: the other OS probes, tmux install, agents and the bare `family: unknown`
+# lookups, follow in 2.3.3), the intents the app requests through Containers' recipe OS. A pattern is an exact intent
+# id or a prefix ending in `*`. ci/format-cases.json's `idLikeIntents` pins both twins to it; for any other intent the
+# parent is never passed, whatever the file's `idLike` says.
+ID_LIKE_INTENTS = ("ca-certificates.install", "compose.*", "engine.*", "git.install", "podman.*", "sudo.grant",
+                   "sudo.install")
+# meshTerm ContainerHostFixes.systemdInheritance (the Engine-side guard, not data): the Containers intents whose
+# INHERITED lines assume systemd. The app asks them WITHOUT the host's ID_LIKE unless its probe saw systemd, so a
+# Devuan host keeps today's lines there (the apt engine.docker.rootless-prepare line installs dbus-user-session, which
+# Devuan 6 has no candidate for, measured 2026-10-19). run-recipes.py does the same for an image row with
+# "systemd": false.
+SYSTEMD_INHERITANCE = ("engine.docker.rootless-prepare",)
 PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
 INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\Z")
@@ -244,6 +278,11 @@ def load(data):
         raise RecipeError("serial must be an integer >= 1")
     if not isinstance(doc.get("date"), str) or not DATE.match(doc["date"]):
         raise RecipeError("date must be YYYY-MM-DD")
+    if doc.get("idLike") is not None:  # an explicit null is absent, as in the app's decoder
+        id_like = doc["idLike"]
+        if not isinstance(id_like, list) or len(id_like) > MAX_ID_LIKE or len(set(map(str, id_like))) != len(id_like) \
+                or not all(isinstance(i, str) and DISTRO_ID.match(i) for i in id_like):
+            raise RecipeError(f"idLike: at most {MAX_ID_LIKE} distinct distro ids")
     packages = doc.get("packages")
     if not isinstance(packages, dict):
         raise RecipeError("packages must be an object")
@@ -331,18 +370,81 @@ def check_covers(doc, previous):
             raise RecipeError(f"drops package {package}")
 
 
-def score(variant, family, distro_id=None, version=None):
-    """How specifically `variant` applies (higher wins), None when it does not (HostRecipeVariant.score)."""
+def named_ids(doc):
+    """Every distro id a variant of any intent names (unusable variants included): such a distro is fully specified
+    and never inherits."""
+    return {i for variants in doc["intents"].values() for v in variants for i in v.get("ids", ())}
+
+
+def inherits_id_like(intent):
+    """Whether `intent` takes the ID_LIKE parent (ID_LIKE_INTENTS)."""
+    return any(intent.startswith(p[:-1]) if p.endswith("*") else intent == p for p in ID_LIKE_INTENTS)
+
+
+def intent_parent(doc, intent, distro_id, id_like, classifier_ids=()):
+    """The parent to pass to `select` for `intent` (HostRecipeStore.command): `parent` for an ID_LIKE intent, else
+    None."""
+    return parent(doc, distro_id, id_like, classifier_ids) if inherits_id_like(intent) else None
+
+
+def recipe_os(doc, intent, family, distro_id, id_like, classifier_ids=(), parent_families=None):
+    """(family, parent, family_inherited) to pass to `select` for `intent` (HostRecipeDocument.resolved, as
+    HostRecipeStore.command resolves it from the document IN USE, and passes unchanged to the bundled fallback): the
+    parent (`intent_parent`), and with it the parent's family from `parent_families` (e.g.
+    CONTAINERS_PARENT_FAMILIES) when the host's own `family` is `unknown`, marked inherited. Both come from the same
+    document, so its kill switch turns the family back too."""
+    parent_id = intent_parent(doc, intent, distro_id, id_like, classifier_ids)
+    inherited = (parent_families or {}).get(parent_id) if parent_id and family == "unknown" else None
+    if inherited and inherited != "unknown":
+        return inherited, parent_id, True
+    return family, parent_id, False
+
+
+def parent(doc, distro_id, id_like, classifier_ids=()):
+    """The ONE parent a host inherits recipe lines from (HostRecipeDocument.parent), None for none: never for a
+    distro the document or the app's classifier (`classifier_ids`, e.g. CONTAINERS_CLASSIFIER_IDS) names. Otherwise
+    the ID_LIKE tokens are walked in order (the host's own id skipped): a token on the document's `idLike` allowlist
+    is the parent; a family root off it (ID_LIKE_FAMILY_ROOTS: rhel, centos, suse, ...) stops the walk with no
+    parent; any other token (a named derivative such as linuxmint, or an unrecognised id) is skipped. So
+    `linuxmint ubuntu` -> ubuntu, `rhel centos fedora` -> None. Resolve it from the document IN USE and pass the
+    same parent to the bundled fallback, so a hosted kill switch also holds there. The id and every token are trimmed
+    and lower-cased first (an empty token is skipped)."""
+    allowed = doc.get("idLike") or []
+    if not allowed or not id_like:
+        return None
+    distro_id = (distro_id or "").strip().lower() or None
+    if distro_id and (distro_id in named_ids(doc) or distro_id in classifier_ids):
+        return None
+    for token in id_like:
+        token = token.strip().lower()
+        if not token or token == distro_id:
+            continue
+        if token in allowed:
+            return token
+        if token in ID_LIKE_FAMILY_ROOTS:
+            return None
+    return None
+
+
+def score(variant, family, distro_id=None, version=None, parent_id=None, family_inherited=False):
+    """How specifically `variant` applies (higher wins), None when it does not (HostRecipeVariant.score). An id
+    match is 8, the inherited parent's 6 (only on a variant without a version range: the VERSION_ID is the
+    derivative's), a version range 2, the family 1, `any` 0. `family_inherited`: `family` is the parent's
+    (`recipe_os`), so a version-only line does not match either (its range is the
+    family's distributions' versions, not the derivative's)."""
     exact = family in variant["families"]
     if not exact and ("any" not in variant["families"] or family == "windows"):
         return None
     value = 1 if exact else 0
     if "ids" in variant:
-        if not distro_id or distro_id.lower() not in variant["ids"]:
+        if distro_id and distro_id.lower() in variant["ids"]:
+            value += 8
+        elif parent_id and parent_id in variant["ids"] and "versions" not in variant:
+            return value + 6
+        else:
             return None
-        value += 4
     if "versions" in variant:
-        if version is None:
+        if version is None or (family_inherited and "ids" not in variant):
             return None
         low, high = variant["versions"].get("min"), variant["versions"].get("below")
         if low and compare_versions(version, parse_version(low)) < 0:
@@ -353,14 +455,22 @@ def score(variant, family, distro_id=None, version=None):
     return value
 
 
-def select(doc, intent, family, distro_id=None, version_id=None, bundled=None):
+def select(doc, intent, family, distro_id=None, version_id=None, bundled=None, parent_id=None, family_inherited=False):
     """The app's choice (HostRecipeDocument.variant): the most specific matching variant, file order on a tie. When an
     UNUSABLE variant (a later app's) applies at least as specifically as the best usable one, the answer for this
-    intent and OS is the bundled document's (`bundled`; None without one), never a wider usable line."""
+    intent and OS is the bundled document's (`bundled`; None without one), never a wider usable line.
+
+    `parent_id` (from `parent`, resolved against the document in use): an intent with a VERSIONED variant naming the
+    parent does not use the parent at all (the derivative's base version is unknown, so a version-blind parent line
+    may be the wrong one)."""
     best, best_score, blocked = None, None, None
     version = parse_version(version_id) if version_id else None
-    for index, variant in enumerate(doc["intents"].get(intent, [])):
-        value = score(variant, family, distro_id, version)
+    variants = doc["intents"].get(intent, [])
+    inherit = parent_id
+    if inherit and any(inherit in v.get("ids", ()) and "versions" in v for v in variants):
+        inherit = None
+    for index, variant in enumerate(variants):
+        value = score(variant, family, distro_id, version, inherit, family_inherited)
         if value is None:
             continue
         if not is_usable(doc, intent, index):
@@ -369,5 +479,6 @@ def select(doc, intent, family, distro_id=None, version_id=None, bundled=None):
         if best_score is None or value > best_score:
             best, best_score = variant, value
     if blocked is not None and (best_score is None or blocked >= best_score):
-        return select(bundled, intent, family, distro_id, version_id) if bundled is not None else None
+        return select(bundled, intent, family, distro_id, version_id, parent_id=parent_id,
+                      family_inherited=family_inherited) if bundled is not None else None
     return best
