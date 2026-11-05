@@ -65,8 +65,8 @@ foreground, at most every 12 hours (1 hour after a failure).
     `security-updates.apt`, `security-updates.apk` and `security-updates.dnf`; in `sudo.install` only right after an
     install verb or as `p="{{packages}}"`; in a `security-updates.*` intent only right after an upgrade verb, as whole
     words: `--only-upgrade -y `, `upgrade -y ` or `upgrade `, at the start or after a space, never `--upgrade ` or
-    `foo-upgrade `, and with no `add` / `install` word anywhere before it except apt-get's `install --only-upgrade -y `,
-    meshTerm 2.4). Names are `[a-z0-9][a-z0-9.+_-]*`; `security-updates.dnf` alone also takes capitalised rpm names
+    `foo-upgrade `, and with no `add` / `install` / `reinstall` / `localinstall` / `groupinstall` word anywhere before
+    it except apt-get's `install --only-upgrade -y ` in `security-updates.apt`, meshTerm 2.4). Names are `[a-z0-9][a-z0-9.+_-]*`; `security-updates.dnf` alone also takes capitalised rpm names
     (`NetworkManager`, `perl-DBI`: `[A-Za-z0-9][A-Za-z0-9.+_-]*`, in its `{{packages}}` value and `ci.packages`);
   - `{{port}}` (1-65535) and `{{proto}}` (`tcp` / `udp`) for firewall lines;
   - `{{group}}` the admin group (`sudo` / `wheel`), only right after `-aG ` / `-G ` or as `addgroup {{user}} {{group}}`
