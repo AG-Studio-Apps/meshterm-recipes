@@ -22,10 +22,20 @@ GROUP_OPENERS = ("-aG ", "-G ", "addgroup {{user}} ")
 # `{{packages}}` in sudo.install: only right after an install verb, or as a shell variable's value.
 SUDO_INSTALL_PACKAGE_OPENERS = ("install -y ", "add ", "-S --noconfirm ", 'p="')
 # `{{packages}}` in a `security-updates.*` intent (meshTerm docs/plan-host-cve-scanner.md 4.5, app 2.4): only right
-# after an UPGRADE verb. The names come from the host's own package listing, so the line may only upgrade what is
-# installed, never install anything new (HostRecipeTemplate.securityUpdatesPackageOpeners, the same list).
+# after an UPGRADE verb, as whole words (the verb starts the line or follows a space). The names come from the host's
+# own package listing, so the line may only upgrade what is installed, never install anything new
+# (HostRecipeTemplate.securityUpdatesPackageOpeners, the same list).
 SECURITY_UPDATES_PREFIX = "security-updates."
 SECURITY_UPDATES_PACKAGE_OPENERS = ("--only-upgrade -y ", "upgrade -y ", "upgrade ")
+
+
+def _ends_with_word(text, opener):
+    """`text` ends with `opener` as whole words: the opener starts the text or follows a space, so `--upgrade ` or
+    `foo-upgrade ` never pass for `upgrade ` (meshTerm S3 review B L3; HostRecipeTemplate.endsWithWord is the twin)."""
+    if not text.endswith(opener):
+        return False
+    head = text[: len(text) - len(opener)]
+    return head == "" or head.endswith(" ")
 PROTOS = ("tcp", "udp")
 GROUPS = ("sudo", "wheel")
 PATH_VALUE = re.compile(r"^/[A-Za-z0-9._/+-]{1,255}\Z")
@@ -184,7 +194,7 @@ def parse_template(run, intent=None):
             if not before.endswith(SUDO_INSTALL_PACKAGE_OPENERS):
                 raise RecipeError("{{packages}} in sudo.install only right after an install verb or as p=\"...\"")
         elif name == "packages" and intent is not None and intent.startswith(SECURITY_UPDATES_PREFIX):
-            if not before.endswith(SECURITY_UPDATES_PACKAGE_OPENERS):
+            if not any(_ends_with_word(before, opener) for opener in SECURITY_UPDATES_PACKAGE_OPENERS):
                 raise RecipeError("{{packages}} in security-updates only right after an upgrade verb")
         if name in PLACEHOLDERS:
             names.append(name)
