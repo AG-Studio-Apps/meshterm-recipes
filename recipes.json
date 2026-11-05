@@ -425,7 +425,7 @@
     ],
     "server.restart": [
       {"families": ["any"], "run": "{{sudo}}systemctl reboot || {{sudo}}shutdown -r now",
-       "ci": {"skip": "restarts the machine: never in the container matrix (it would end the container or the runner); the VM tier boots it"}},
+       "ci": {"skip": "restarts the machine: never in the container matrix (it would end the container or the runner), and no VM-tier case runs it yet (scripts/vm_test.py reboots with its own line, not this recipe)"}},
       {"families": ["apk"], "run": "{{sudo}}reboot",
        "ci": {"skip": "restarts the machine: OpenRC is not running in a container"}}
     ],

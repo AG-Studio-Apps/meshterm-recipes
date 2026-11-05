@@ -66,11 +66,12 @@ foreground, at most every 12 hours (1 hour after a failure).
     install verb or as `p="{{packages}}"`; in a `security-updates.*` intent only right after an upgrade verb, as whole
     words: `--only-upgrade -y `, `upgrade -y ` or `upgrade `, at the start or after a space, never `--upgrade ` or
     `foo-upgrade `, and with no `add` / `install` / `reinstall` / `localinstall` / `groupinstall` word anywhere before
-    it except apt-get's `install --only-upgrade -y ` in `security-updates.apt`, meshTerm 2.4). Names are `[a-z0-9][a-z0-9.+_-]*`; `security-updates.dnf` alone also takes capitalised rpm names
-    (`NetworkManager`, `perl-DBI`: `[A-Za-z0-9][A-Za-z0-9.+_-]*`, in its `{{packages}}` value and `ci.packages`);
+    it except apt-get's `install --only-upgrade -y ` in `security-updates.apt`, meshTerm 2.4). Names are
+    `[a-z0-9][a-z0-9.+_-]*`; `security-updates.dnf` alone also takes capitalised rpm names (`NetworkManager`,
+    `perl-DBI`: `[A-Za-z0-9][A-Za-z0-9.+_-]*`, in its `{{packages}}` value and `ci.packages`);
   - `{{port}}` (1-65535) and `{{proto}}` (`tcp` / `udp`) for firewall lines;
-  - `{{group}}` the admin group (`sudo` / `wheel`), only right after `-aG ` / `-G ` or as `addgroup {{user}} {{group}}`
-    (the word `sudo` itself is refused anywhere in a run);
+  - `{{group}}` the admin group (`sudo` / `wheel`), only right after `-aG ` / `-G ` or as
+    `addgroup {{user}} {{group}}` (the word `sudo` itself is refused anywhere in a run);
   - `{{path}}` an absolute path of `[A-Za-z0-9._/+-]` (no `//`, no `/.`), such as rootlesskit's.
 
   The app fills them in ONE pass, so a value is never read as a placeholder.
@@ -86,42 +87,55 @@ foreground, at most every 12 hours (1 hour after a failure).
   or by the app's own classifier (`recipes_lib.CONTAINERS_CLASSIFIER_IDS`), never inherits. Otherwise the `ID_LIKE`
   tokens are walked in order: a token on the list is the parent; a FAMILY ROOT off the list
   (`recipes_lib.ID_LIKE_FAMILY_ROOTS`: alpine, arch, centos, debian, fedora, gentoo, mandriva, opensuse, rhel,
-  slackware, suse, ubuntu; the app holds the same list) stops the walk and the host gets no parent; any other token
-  (a named derivative such as `linuxmint`, or an id nobody recognises) is skipped. So `ID_LIKE="linuxmint ubuntu"`
+  slackware, suse, ubuntu; the app holds the same list) stops the walk and the host gets no parent; any other token (a
+  named derivative such as `linuxmint`, or an id nobody recognises) is skipped. So `ID_LIKE="linuxmint ubuntu"`
   inherits `ubuntu` and `ID_LIKE="rhel centos fedora"` inherits nothing while `rhel` is off the list. The parent is
-  resolved from the file in use (the id and the tokens trimmed and lower-cased), and an `ids` line
-  naming it matches as 6 (between an id match, 8, and a version range, 2) but only without `versions`; an intent with
-  a versioned line naming the parent does not use the parent at all. With the parent, a host whose own family is
-  `unknown` also takes the parent's recipe FAMILY (`recipes_lib.CONTAINERS_PARENT_FAMILIES`, the app classifier's
-  families: debian/ubuntu -> apt, fedora -> dnf, alpine -> apk; arch has none and stays `unknown`), so family-level
-  lines apply (elementary -> the apt lines), except version-only ones (their range is the family's distributions').
-  The family is resolved with the parent, from the same file, so `"idLike": []` turns both off. The parent applies ONLY to the intents
+  resolved from the file in use (the id and the tokens trimmed and lower-cased), and an `ids` line naming it matches
+  as 6 (between an id match, 8, and a version range, 2) but only without `versions`; an intent with a versioned line
+  naming the parent does not use the parent at all. With the parent, a host whose own family is `unknown` also takes
+  the parent's recipe FAMILY (`recipes_lib.CONTAINERS_PARENT_FAMILIES`, the app classifier's families: debian/ubuntu
+  -> apt, fedora -> dnf, alpine -> apk; arch has none and stays `unknown`), so family-level lines apply (elementary ->
+  the apt lines), except version-only ones (their range is the family's distributions'). The family is resolved with
+  the parent, from the same file, so `"idLike": []` turns both off. The parent applies ONLY to the intents
   `recipes_lib.ID_LIKE_INTENTS` lists (meshTerm 2.3.2: the Containers intents, `engine.*`, `compose.*`, `podman.*`,
   `git.install`, `ca-certificates.install`, `sudo.install`, `sudo.grant`; tmux, agents, packages, sshd, firewall and
   the rest follow in 2.3.3); the format cases' `idLikeIntents` pins the app to the same list. So naming a derivative
-  in one intent moves EVERY intent of it off its parent's lines: `validate.py --declared` requires
-  `{"named": "<id>"}` for an id `compat/distros.json` lists with an `idLike` (classifier ids aside), `{"unnamed": "<id>"}`
-  for one that is no longer named (it starts inheriting), and a change to `idLike` itself is declared as
-  `{"kind": "idLike"}`. From serial 11 a `--declared` run without `compat/distros.json` (or `--distros`) FAILS.
-  Engine-side guard (in the app, not the data): meshTerm asks `recipes_lib.SYSTEMD_INHERITANCE`
-  (`engine.docker.rootless-prepare`) WITHOUT the host's ID_LIKE unless its probe saw systemd, so Devuan never gets
-  the inherited apt preparation (it installs `dbus-user-session`, which Devuan 6 has no candidate for).
-  `run-recipes.py` mirrors it for an image row with `"systemd": false`. The sudo recipes' `{{group}}` follows the
-  family the line was selected by (a Fedora derivative on the dnf line: `wheel`), as the variant's `ci.group` does.
+  in one intent moves EVERY intent of it off its parent's lines: `validate.py --declared` requires `{"named": "<id>"}`
+  for an id `compat/distros.json` lists with an `idLike` (classifier ids aside), `{"unnamed": "<id>"}` for one that is
+  no longer named (it starts inheriting), and a change to `idLike` itself is declared as `{"kind": "idLike"}`. From
+  serial 11 a `--declared` run without `compat/distros.json` (or `--distros`) FAILS. Engine-side guard (in the app,
+  not the data): meshTerm asks `recipes_lib.SYSTEMD_INHERITANCE` (`engine.docker.rootless-prepare`) WITHOUT the host's
+  ID_LIKE unless its probe saw systemd, so Devuan never gets the inherited apt preparation (it installs
+  `dbus-user-session`, which Devuan 6 has no candidate for). `run-recipes.py` mirrors it for an image row with
+  `"systemd": false`. The sudo recipes' `{{group}}` follows the family the line was selected by (a Fedora derivative
+  on the dnf line: `wheel`), as the variant's `ci.group` does.
 - **admin** (optional): needs an administrator even without `{{sudo}}` (Docker's install script, which asks for
   sudo itself).
 - **packages**: package id -> family -> name, for `packages.install`. A family with no entry needs nothing.
 - **ci**: for the distro matrix only (the app ignores it): `check` (a shell assertion run as root after the recipe;
   `$MT_USER` is the user it ran as) or `skip` (why it cannot run in a container), and optionally `needs` (package ids
   installed first, as root), `before` (a shell line run first, as root), `packages` (the `{{packages}}` value),
-  `rootOnly` / `userOnly` (why one pass is skipped), `skipOn` and `xfail` (image -> reason; an xfail is reported, never
-  red, and an XPASS asks for the entry to go; `ci/xfail-expect.json` can pin the message an xfail was measured with,
-  intent -> image -> regular expression, and then any other failure there is red), and `port`, `proto`, `group`, `path` (the values to render with).
-  `{{user}}` renders as the case's own user (`mt` in the sudo-user pass, `root` in the root pass).
+  `rootOnly` / `userOnly` (why one pass is skipped), `skipOn` and `xfail` (image -> reason; an xfail is reported,
+  never red, and an XPASS asks for the entry to go; `ci/xfail-expect.json` can pin the message an xfail was measured
+  with, intent -> image -> regular expression, and then any other failure there is red), and `port`, `proto`, `group`,
+  `path` (the values to render with). `{{user}}` renders as the case's own user (`mt` in the sudo-user pass, `root` in
+  the root pass).
 - **Agent and herdr lines** (`agent.*`, `herdr.install`; `scripts/validate.py`): no `{{sudo}}` or `admin`, https URLs
   only, never `/tmp` or a download piped into a shell; an official installer is downloaded with
   `-o ~/.mt-install-<name>.sh`, run, and the line ends `&& rm -f ~/.mt-install-<name>.sh`; Codex's keeps
   `CODEX_NON_INTERACTIVE=1`.
+- **Security updates lines** (meshTerm 2.4, the host Security updates sheet): `tailscale.update`,
+  `tailscale.update.detached` and `tailscale.auto-update` (Tailscale's own updater; Alpine through apk, Arch through
+  a full `pacman -Syu`); `security-updates.apt`, `security-updates.apk` and `security-updates.dnf` (upgrade only the
+  installed packages the host's package check flagged, with the `{{packages}}` rules above); and `server.restart`,
+  which restarts the server so an installed kernel update takes effect. `server.restart` is never part of Install
+  Updates: the sheet shows it as its own Restart Server button, behind a confirmation. Its lines are
+  `{{sudo}}systemctl reboot || {{sudo}}shutdown -r now` (`shutdown -r now` where `systemctl` is missing or refuses)
+  and `{{sudo}}reboot` on Alpine. No CI runs it: the container matrix skips it (it would end the container or the
+  runner) and the VM tier (`scripts/vm_test.py`, branch `vm-tests-s12`) has no case for it yet; it reboots its VMs
+  with its own line. Sudo can ask twice: the fallback is a second `sudo`, so when the first one ends without a cached
+  credential (the password was mistyped until sudo gave up, or the host caches none, `timestamp_timeout=0`), the
+  second asks for the password again before `shutdown -r now` runs. Root runs the bare form and is never asked.
 
 ## How to update a recipe safely
 
@@ -143,9 +157,9 @@ foreground, at most every 12 hours (1 hour after a failure).
 
 6. Open a pull request for the record. It starts no workflow: the publish run is the test.
 7. Merge. `Publish recipes` validates against the main it replaces (incl. the declared-changes check), runs every
-   recipe on the fresh-distro matrix as root and as a sudo user, then waits for the `recipes-signing` approval. Read the job
-   summary (the diff since the deployed commit; a banner if the pipeline itself changed), approve, and the signed
-   pair is deployed and smoke-tested. Devices pick it up within 12 hours of their next launch.
+   recipe on the fresh-distro matrix as root and as a sudo user, then waits for the `recipes-signing` approval. Read
+   the job summary (the diff since the deployed commit; a banner if the pipeline itself changed), approve, and the
+   signed pair is deployed and smoke-tested. Devices pick it up within 12 hours of their next launch.
 
 A new intent or placeholder needs an app release first: today's apps ignore intents they don't know and refuse an
 unknown placeholder. A schema bump stops every older app from updating, so keep schema 1 additive.
@@ -153,9 +167,10 @@ unknown placeholder. A schema bump stops every older app from updating, so keep 
 ## Signing
 
 `publish.yml` is the catalogue's pipeline (meshdeck-docs) for this file: the primary key lives only in the
-`recipes-signing` environment (a required reviewer, who may approve their own run; no admin bypass; `main` only: the sign job
-refuses to run otherwise); the trusted comment is `recipes=host-recipes version=<serial> date=<date> commit=<sha>`.
-A push that changes nothing in `recipes.json` reuses the live signature without approval.
+`recipes-signing` environment (a required reviewer, who may approve their own run; no admin bypass; `main` only: the
+sign job refuses to run otherwise); the trusted comment is
+`recipes=host-recipes version=<serial> date=<date> commit=<sha>`. A push that changes nothing in `recipes.json` reuses
+the live signature without approval.
 
 If the primary key is lost or leaked: sign offline with the emergency key (`scripts/sign-emergency.sh --key …`,
 which validates, checks the serial is above the live one and verifies the result), commit `recipes.json` and
