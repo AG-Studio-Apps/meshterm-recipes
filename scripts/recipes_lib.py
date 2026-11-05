@@ -28,11 +28,14 @@ SUDO_INSTALL_PACKAGE_OPENERS = ("install -y ", "add ", "-S --noconfirm ", 'p="')
 SECURITY_UPDATES_PREFIX = "security-updates."
 SECURITY_UPDATES_PACKAGE_OPENERS = ("--only-upgrade -y ", "upgrade -y ", "upgrade ")
 # ... and (meshTerm S4 review L6) no install verb ANYWHERE before it: `apk add upgrade {{packages}}` would install a
-# package named upgrade plus every name, and `apt-get install upgrade {{packages}}` the same. The one install allowed
-# is apt-get's own upgrade-only form, `install --only-upgrade -y ` right before the names
-# (HostRecipeTemplate.securityUpdatesInstallWords / securityUpdatesAptOpener, the same rule).
-SECURITY_UPDATES_INSTALL_WORDS = ("add", "install")
+# package named upgrade plus every name, and `apt-get install upgrade {{packages}}` the same; dnf's `reinstall`,
+# `localinstall` and `groupinstall` are whole words of their own (S5 app review L4). The one install allowed is
+# apt-get's own upgrade-only form, `install --only-upgrade -y ` right before the names, and only in
+# security-updates.apt (HostRecipeTemplate.securityUpdatesInstallWords / securityUpdatesAptOpener /
+# securityUpdatesAptIntent, the same rule).
+SECURITY_UPDATES_INSTALL_WORDS = ("add", "install", "reinstall", "localinstall", "groupinstall")
 SECURITY_UPDATES_APT_OPENER = "install --only-upgrade -y "
+SECURITY_UPDATES_APT_INTENT = "security-updates.apt"
 
 
 def _ends_with_word(text, opener):
@@ -215,9 +218,10 @@ def parse_template(run, intent=None):
             if not any(_ends_with_word(before, opener) for opener in SECURITY_UPDATES_PACKAGE_OPENERS):
                 raise RecipeError("{{packages}} in security-updates only right after an upgrade verb")
             head = before[: len(before) - len(SECURITY_UPDATES_APT_OPENER)] \
-                if _ends_with_word(before, SECURITY_UPDATES_APT_OPENER) else before
+                if intent == SECURITY_UPDATES_APT_INTENT and _ends_with_word(before, SECURITY_UPDATES_APT_OPENER) \
+                else before
             if any(contains_word(head, word) for word in SECURITY_UPDATES_INSTALL_WORDS):
-                raise RecipeError("an install verb (add, install) before {{packages}} in security-updates")
+                raise RecipeError("an install verb (add, install, reinstall ...) before {{packages}} in security-updates")
         if name in PLACEHOLDERS:
             names.append(name)
         plain += " "
