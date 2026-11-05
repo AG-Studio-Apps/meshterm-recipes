@@ -61,8 +61,9 @@ foreground, at most every 12 hours (1 hour after a failure).
 - **run**: one line of printable ASCII, at most 2,000 characters. Placeholders, and only these:
   - `{{sudo}}` opens a command (at the start, or after `&& `, `; `, `then `, `| `): `sudo ` or nothing;
   - `{{user}}` the SSH user, as one safe shell word (`$USER` when the app names no one);
-  - `{{packages}}` the package names (for `packages.install`, `podman.rootless-prerequisites` and `sudo.install`; in
-    `sudo.install` only right after an install verb or as `p="{{packages}}"`);
+  - `{{packages}}` the package names (for `packages.install`, `podman.rootless-prerequisites`, `sudo.install` and `security-updates.apt`; in
+    `sudo.install` only right after an install verb or as `p="{{packages}}"`; in a `security-updates.*` intent only
+    right after an upgrade verb: `--only-upgrade -y `, `upgrade -y ` or `upgrade `, meshTerm 2.4);
   - `{{port}}` (1-65535) and `{{proto}}` (`tcp` / `udp`) for firewall lines;
   - `{{group}}` the admin group (`sudo` / `wheel`), only right after `-aG ` / `-G ` or as `addgroup {{user}} {{group}}`
     (the word `sudo` itself is refused anywhere in a run);

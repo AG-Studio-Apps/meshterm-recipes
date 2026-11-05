@@ -411,6 +411,10 @@
       {"families": ["any"], "run": "{{sudo}}tailscale set --auto-update",
        "ci": {"skip": "tailscaled is not running in a container"}}
     ],
+    "security-updates.apt": [
+      {"families": ["apt"], "run": "{{sudo}}apt-get update && {{sudo}}apt-get install --only-upgrade -y {{packages}}",
+       "ci": {"packages": ["apt", "libc6"], "check": "dpkg -s apt >/dev/null"}}
+    ],
     "firewall.ufw.allow": [
       {"families": ["any"], "run": "{{sudo}}ufw allow {{port}}/{{proto}}",
        "ci": {"before": "apt-get update -qq && apt-get install -y -qq ufw", "port": 49820, "proto": "udp", "check": "ufw show added | grep -q 49820", "skipOn": {"fedora:latest": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "rockylinux/rockylinux:9": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "alpine:3.20": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "amazonlinux:2023": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "archlinux:latest": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)", "opensuse/leap:15.6": "ufw: the Debian-family images (the app offers ufw where ufw is the host's firewall)"}}}
