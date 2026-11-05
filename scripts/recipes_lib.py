@@ -88,6 +88,18 @@ ID_LIKE_INTENTS = ("ca-certificates.install", "compose.*", "engine.*", "git.inst
 # "systemd": false.
 SYSTEMD_INHERITANCE = ("engine.docker.rootless-prepare",)
 PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
+# meshTerm docs/plan-host-cve-scanner.md 3.4 (S5): EL binary rpm names may be capitalised (NetworkManager, perl-DBI,
+# ModemManager), and security-updates.dnf names the host's own rpm binaries. Only that intent's {{packages}} value
+# (and its ci.packages) takes them: every other intent keeps PACKAGE (HostRecipeTemplate.capitalisedPackageIntents,
+# HostRecipeDocument.isRpmPackageName: the same rule).
+RPM_PACKAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}\Z")
+CAPITALISED_PACKAGE_INTENTS = ("security-updates.dnf",)
+
+
+def package_ok(name, intent=None):
+    """A `{{packages}}` name for `intent`: PACKAGE, or RPM_PACKAGE for the intents that take rpm names."""
+    pattern = RPM_PACKAGE if intent in CAPITALISED_PACKAGE_INTENTS else PACKAGE
+    return isinstance(name, str) and bool(pattern.match(name))
 INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\Z")
 VERSION = re.compile(r"^[0-9]{1,9}(\.[0-9]{1,9}){0,5}\Z")
@@ -246,15 +258,16 @@ def user_word(user):
     return user if re.match(r"^[A-Za-z0-9._-]+$", user) else "'" + user.replace("'", "'\\''") + "'"
 
 
-def render(run, sudo, user=None, packages=None, port=None, proto=None, group=None, path=None):
+def render(run, sudo, user=None, packages=None, port=None, proto=None, group=None, path=None, intent=None):
     """The app's rendering (HostRecipeTemplate.render): ONE pass over the template, so a value is never read as a
-    placeholder. None when a used placeholder has no value, or a refused one (`{{user}}` alone defaults to $USER)."""
+    placeholder. None when a used placeholder has no value, or a refused one (`{{user}}` alone defaults to $USER).
+    `intent`: the template's intent (security-updates.dnf takes capitalised rpm names, package_ok)."""
     values = {"sudo": "sudo " if sudo else ""}
     if user is None:
         values["user"] = "$USER"
     elif user_word(user) is not None:
         values["user"] = user_word(user)
-    if packages and all(isinstance(p, str) and PACKAGE.match(p) for p in packages):
+    if packages and all(package_ok(p, intent) for p in packages):
         values["packages"] = " ".join(packages)
     if is_int(port) and 1 <= port <= 65535:
         values["port"] = str(port)

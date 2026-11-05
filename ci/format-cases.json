@@ -33,6 +33,7 @@
     {"run": "{{sudo}}apk -U upgrade {{packages}}", "intent": "security-updates.apk", "result": "ok", "why": "the serial 12 apk line: the whole word upgrade after a flag"},
     {"run": "{{sudo}}apk add -U {{packages}}", "intent": "security-updates.apk", "result": "refused", "why": "add installs: security-updates may only upgrade"},
     {"run": "{{sudo}}dnf upgrade -y {{packages}}", "intent": "security-updates.dnf", "result": "ok"},
+    {"run": "{{sudo}}dnf --refresh upgrade -y {{packages}}", "intent": "security-updates.dnf", "result": "ok", "why": "the serial 12 dnf line: the whole word upgrade after a global option"},
     {"run": "{{sudo}}apt-get install -y {{packages}}", "intent": "security-updates.apt", "result": "refused", "why": "security-updates may only upgrade: {{packages}} only after an upgrade verb"},
     {"run": "echo {{packages}}", "intent": "security-updates.apt", "result": "refused"},
     {"run": "{{sudo}}pip install --upgrade {{packages}}", "intent": "security-updates.apt", "result": "refused", "why": "upgrade only as a whole word, not --upgrade"},
@@ -97,7 +98,12 @@
     {"run": "{{sudo}}addgroup {{user}} docker", "values": {"sudo": true, "user": "{{sudo}}"}, "out": "sudo addgroup '{{sudo}}' docker"},
     {"run": "{{sudo}}apk add {{packages}}", "values": {"sudo": true, "packages": ["{{user}}"]}, "out": null},
     {"run": "{{sudo}}addgroup {{user}} docker", "values": {"sudo": true, "user": "o'brien"}, "out": "sudo addgroup 'o'\\''brien' docker"},
-    {"run": "{{sudo}}addgroup {{user}} docker", "values": {"sudo": true, "user": "-rf"}, "out": null}
+    {"run": "{{sudo}}addgroup {{user}} docker", "values": {"sudo": true, "user": "-rf"}, "out": null},
+    {"run": "{{sudo}}dnf --refresh upgrade -y {{packages}}", "intent": "security-updates.dnf", "values": {"sudo": true, "packages": ["NetworkManager", "perl-DBI", "openssl-libs"]}, "out": "sudo dnf --refresh upgrade -y NetworkManager perl-DBI openssl-libs"},
+    {"run": "{{sudo}}apt-get install --only-upgrade -y {{packages}}", "intent": "security-updates.apt", "values": {"sudo": true, "packages": ["NetworkManager"]}, "out": null},
+    {"run": "{{sudo}}apk -U upgrade {{packages}}", "values": {"sudo": false, "packages": ["NetworkManager"]}, "out": null},
+    {"run": "{{sudo}}dnf --refresh upgrade -y {{packages}}", "intent": "security-updates.dnf", "values": {"sudo": true, "packages": ["-oX"]}, "out": null},
+    {"run": "{{sudo}}dnf --refresh upgrade -y {{packages}}", "intent": "security-updates.dnf", "values": {"sudo": true, "packages": ["Net;Manager"]}, "out": null}
   ],
   "selection": [
     {"variants": [{"families": ["apt"], "run": "family"}, {"families": ["apt"], "ids": ["debian"], "run": "later", "init": "openrc"}],

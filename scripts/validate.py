@@ -53,7 +53,7 @@ def check_ci(doc):
                                   or not all(n in doc["packages"] for n in ci["needs"])):
                 raise lib.RecipeError(f"{where}.needs: package ids from the packages table")
             if "packages" in ci and (not isinstance(ci["packages"], list) or not ci["packages"]
-                                     or not all(isinstance(p, str) and lib.PACKAGE.match(p) for p in ci["packages"])):
+                                     or not all(lib.package_ok(p, intent) for p in ci["packages"])):
                 raise lib.RecipeError(f"{where}.packages: package names")
             for key in ("xfail", "skipOn"):
                 if key in ci and (not isinstance(ci[key], dict)
@@ -400,7 +400,7 @@ def run_format_cases():
             failures += 1
     for case in cases["renders"]:
         values = dict(case["values"])
-        got = lib.render(case["run"], values.pop("sudo"), **values)
+        got = lib.render(case["run"], values.pop("sudo"), intent=case.get("intent"), **values)
         if got != case["out"]:
             print(f"self-test FAIL: render {case['run']!r} {case['values']!r}: {got!r}, expected {case['out']!r}")
             failures += 1
