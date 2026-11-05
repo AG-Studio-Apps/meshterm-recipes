@@ -1,0 +1,30 @@
+{
+ "_comment": "Every app-visible change serial 12 makes against serial 11 (scripts/validate.py --declared ci/serial12-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 11> --distros compat/distros.json). UNPUBLISHED DRAFT (2026-11-05): meshTerm docs/plan-host-cve-scanner.md S1, the Tailscale update intents the host Security updates sheet shows (meshTerm 2.4). Serial 11 is live, so these go into the next serial rather than into 11.",
+ "changes": [
+  {
+   "intent": "tailscale.update",
+   "selector": {"families": ["any"]},
+   "reason": "New intent (meshTerm 2.4, host Security updates): update Tailscale with its own updater, for hosts on Tailscale's package repository or tarball (S0: works on debian:12 with the official repo). Never combined with --dry-run."
+  },
+  {
+   "intent": "tailscale.update",
+   "selector": {"families": ["apk"]},
+   "reason": "New intent: Alpine's distro package. S0: tailscale update on Alpine does not refuse, it reports the distro build as current (1.66.4) and exits 0, so Alpine updates through apk only."
+  },
+  {
+   "intent": "tailscale.update",
+   "selector": {"families": ["pacman"]},
+   "reason": "New intent: Arch refuses partial upgrades (S0: tailscale update says to run pacman -Syu), so the line is a full-system upgrade; the app's sheet says it updates the whole system."
+  },
+  {
+   "intent": "tailscale.update.detached",
+   "selector": {"families": ["any"]},
+   "reason": "New intent: the same update as a transient systemd unit, so a tailscaled restart that drops the SSH connection carrying it does not stop it (tailnet hosts, systemd only; copy-only in meshTerm until the tailnet measurement)."
+  },
+  {
+   "intent": "tailscale.auto-update",
+   "selector": {"families": ["any"]},
+   "reason": "New intent: turn on Tailscale's own auto-updates."
+  }
+ ]
+}

@@ -1,8 +1,8 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 11,
-  "date": "2026-10-19",
+  "serial": 12,
+  "date": "2026-11-05",
   "idLike": ["arch", "debian", "ubuntu", "fedora"],
   "packages": {
     "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
@@ -393,6 +393,22 @@
     ],
     "tailscale.set-ssh": [
       {"families": ["any"], "run": "{{sudo}}tailscale set --ssh",
+       "ci": {"skip": "tailscaled is not running in a container"}}
+    ],
+    "tailscale.update": [
+      {"families": ["any"], "run": "{{sudo}}tailscale update --yes",
+       "ci": {"skip": "needs Tailscale's own package repository or tarball install and a running tailscaled; measured on debian:12 with the official repo (meshTerm docs/plan-host-cve-scanner.md S0)"}},
+      {"families": ["apk"], "run": "{{sudo}}apk upgrade tailscale",
+       "ci": {"before": "apk add -q tailscale", "check": "command -v tailscale"}},
+      {"families": ["pacman"], "run": "{{sudo}}pacman -Syu",
+       "ci": {"skip": "a full-system upgrade (Arch refuses a partial one: tailscale update and pacman -S tailscale alone are unsupported); measured on archlinux:latest in S0"}}
+    ],
+    "tailscale.update.detached": [
+      {"families": ["any"], "run": "{{sudo}}systemd-run --unit=mt-ts-update --collect tailscale update --yes",
+       "ci": {"skip": "systemd is not running in a container"}}
+    ],
+    "tailscale.auto-update": [
+      {"families": ["any"], "run": "{{sudo}}tailscale set --auto-update",
        "ci": {"skip": "tailscaled is not running in a container"}}
     ],
     "firewall.ufw.allow": [
