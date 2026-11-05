@@ -27,6 +27,12 @@ SUDO_INSTALL_PACKAGE_OPENERS = ("install -y ", "add ", "-S --noconfirm ", 'p="')
 # in its new kernel's own package) (HostRecipeTemplate.securityUpdatesPackageOpeners, the same list).
 SECURITY_UPDATES_PREFIX = "security-updates."
 SECURITY_UPDATES_PACKAGE_OPENERS = ("--only-upgrade -y ", "upgrade -y ", "upgrade ")
+# ... and (meshTerm S4 review L6) no install verb ANYWHERE before it: `apk add upgrade {{packages}}` would install a
+# package named upgrade plus every name, and `apt-get install upgrade {{packages}}` the same. The one install allowed
+# is apt-get's own upgrade-only form, `install --only-upgrade -y ` right before the names
+# (HostRecipeTemplate.securityUpdatesInstallWords / securityUpdatesAptOpener, the same rule).
+SECURITY_UPDATES_INSTALL_WORDS = ("add", "install")
+SECURITY_UPDATES_APT_OPENER = "install --only-upgrade -y "
 
 
 def _ends_with_word(text, opener):
@@ -196,6 +202,10 @@ def parse_template(run, intent=None):
         elif name == "packages" and intent is not None and intent.startswith(SECURITY_UPDATES_PREFIX):
             if not any(_ends_with_word(before, opener) for opener in SECURITY_UPDATES_PACKAGE_OPENERS):
                 raise RecipeError("{{packages}} in security-updates only right after an upgrade verb")
+            head = before[: len(before) - len(SECURITY_UPDATES_APT_OPENER)] \
+                if _ends_with_word(before, SECURITY_UPDATES_APT_OPENER) else before
+            if any(contains_word(head, word) for word in SECURITY_UPDATES_INSTALL_WORDS):
+                raise RecipeError("an install verb (add, install) before {{packages}} in security-updates")
         if name in PLACEHOLDERS:
             names.append(name)
         plain += " "
