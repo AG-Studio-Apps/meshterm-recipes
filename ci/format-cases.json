@@ -30,6 +30,8 @@
     {"run": "echo {{packages}}", "intent": "packages.install", "result": "ok"},
     {"run": "{{sudo}}apt-get update && {{sudo}}apt-get install --only-upgrade -y {{packages}}", "intent": "security-updates.apt", "result": "ok"},
     {"run": "{{sudo}}apk upgrade {{packages}}", "intent": "security-updates.apk", "result": "ok"},
+    {"run": "{{sudo}}apk -U upgrade {{packages}}", "intent": "security-updates.apk", "result": "ok", "why": "the serial 12 apk line: the whole word upgrade after a flag"},
+    {"run": "{{sudo}}apk add -U {{packages}}", "intent": "security-updates.apk", "result": "refused", "why": "add installs: security-updates may only upgrade"},
     {"run": "{{sudo}}dnf upgrade -y {{packages}}", "intent": "security-updates.dnf", "result": "ok"},
     {"run": "{{sudo}}apt-get install -y {{packages}}", "intent": "security-updates.apt", "result": "refused", "why": "security-updates may only upgrade: {{packages}} only after an upgrade verb"},
     {"run": "echo {{packages}}", "intent": "security-updates.apt", "result": "refused"},

@@ -50,6 +50,11 @@
    "intent": "security-updates.apt",
    "selector": {"families": ["apt"]},
    "reason": "New intent (meshTerm 2.4 S3, host Security updates): upgrade the installed packages a host's package check flagged (High/Critical fixes published in its own distro repos). --only-upgrade, so it installs no package the host does not already have, except what an upgrade itself pulls in: with the running kernel line's meta package named (linux-image-oracle, linux-generic), apt installs the new kernel's own linux-image-<abi> next to the running one (it never restarts the server); the app fills {{packages}} from the host's own dpkg listing, each name re-checked, and the validators (app and recipes, same release) refuse {{packages}} in a security-updates intent anywhere but right after an upgrade verb."
+  },
+  {
+   "intent": "security-updates.apk",
+   "selector": {"families": ["apk"]},
+   "reason": "New intent (meshTerm 2.4 S4, host Security updates on Alpine): upgrade the installed packages a host's package check flagged, mirroring security-updates.apt. apk upgrade with names upgrades only those installed packages (and what their new versions depend on); -U refreshes the index first (an old local index would report no upgrade, as in tailscale.update's apk line). The app fills {{packages}} from the host's own apk listing (/lib/apk/db/installed), each name re-checked, and the validators refuse {{packages}} in a security-updates intent anywhere but right after an upgrade verb (here the whole word upgrade). A kernel package (linux-lts, linux-virt) is replaced in place; the app never restarts the server."
   }
  ]
 }
