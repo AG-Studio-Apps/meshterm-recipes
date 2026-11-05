@@ -398,7 +398,7 @@
     "tailscale.update": [
       {"families": ["any"], "run": "{{sudo}}tailscale update --yes",
        "ci": {"skip": "needs Tailscale's own package repository or tarball install and a running tailscaled; measured on debian:12 with the official repo (meshTerm docs/plan-host-cve-scanner.md S0)"}},
-      {"families": ["apk"], "run": "{{sudo}}apk upgrade tailscale",
+      {"families": ["apk"], "run": "{{sudo}}apk -U upgrade tailscale",
        "ci": {"before": "apk add -q tailscale", "check": "command -v tailscale"}},
       {"families": ["pacman"], "run": "{{sudo}}pacman -Syu",
        "ci": {"skip": "a full-system upgrade (Arch refuses a partial one: tailscale update and pacman -S tailscale alone are unsupported); measured on archlinux:latest in S0"}}
