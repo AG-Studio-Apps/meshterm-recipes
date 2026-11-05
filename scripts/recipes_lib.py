@@ -23,8 +23,8 @@ GROUP_OPENERS = ("-aG ", "-G ", "addgroup {{user}} ")
 SUDO_INSTALL_PACKAGE_OPENERS = ("install -y ", "add ", "-S --noconfirm ", 'p="')
 # `{{packages}}` in a `security-updates.*` intent (meshTerm docs/plan-host-cve-scanner.md 4.5, app 2.4): only right
 # after an UPGRADE verb, as whole words (the verb starts the line or follows a space). The names come from the host's
-# own package listing, so the line may only upgrade what is installed, never install anything new
-# (HostRecipeTemplate.securityUpdatesPackageOpeners, the same list).
+# own package listing, so the line may only upgrade what is installed (an upgraded kernel meta package still brings
+# in its new kernel's own package) (HostRecipeTemplate.securityUpdatesPackageOpeners, the same list).
 SECURITY_UPDATES_PREFIX = "security-updates."
 SECURITY_UPDATES_PACKAGE_OPENERS = ("--only-upgrade -y ", "upgrade -y ", "upgrade ")
 
