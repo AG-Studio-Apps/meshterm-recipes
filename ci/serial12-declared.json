@@ -1,0 +1,95 @@
+{
+ "_comment": "Every app-visible change serial 12 makes against serial 11 (scripts/validate.py --declared ci/serial12-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 11> --distros compat/distros.json). UNPUBLISHED DRAFT (2026-11-05): meshTerm docs/plan-host-cve-scanner.md S1, the Tailscale update intents the host Security updates sheet shows (meshTerm 2.4). Serial 11 is live, so these go into the next serial rather than into 11.",
+ "changes": [
+  {
+   "intent": "tailscale.update",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.4, host Security updates): update Tailscale with its own updater, for hosts on Tailscale's package repository or tarball (S0: works on debian:12 with the official repo). Never combined with --dry-run."
+  },
+  {
+   "intent": "tailscale.update",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "New intent: Alpine's distro package, with the index refreshed first (apk -U: an old local index would report no upgrade). S0: tailscale update on Alpine does not refuse, it reports the distro build as current (1.66.4) and exits 0, so Alpine updates through apk only."
+  },
+  {
+   "intent": "tailscale.update",
+   "selector": {
+    "families": [
+     "pacman"
+    ]
+   },
+   "reason": "New intent: Arch refuses partial upgrades (S0: tailscale update says to run pacman -Syu), so the line is a full-system upgrade; the app's sheet says it updates the whole system."
+  },
+  {
+   "intent": "tailscale.update.detached",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New intent: the same update as a transient systemd unit, so a tailscaled restart that drops the SSH connection carrying it does not stop it (tailnet hosts, systemd only; copy-only in meshTerm until the tailnet measurement)."
+  },
+  {
+   "intent": "tailscale.auto-update",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New intent: turn on Tailscale's own auto-updates."
+  },
+  {
+   "intent": "security-updates.apt",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.4 S3, host Security updates): upgrade the installed packages a host's package check flagged (High/Critical fixes published in its own distro repos). --only-upgrade, so it installs no package the host does not already have, except what an upgrade itself pulls in: with the running kernel line's meta package named (linux-image-oracle, linux-generic), apt installs the new kernel's own linux-image-<abi> next to the running one (it never restarts the server); the app fills {{packages}} from the host's own dpkg listing, each name re-checked, and the validators (app and recipes, same release) refuse {{packages}} in a security-updates intent anywhere but right after an upgrade verb."
+  },
+  {
+   "intent": "security-updates.apk",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.4 S4, host Security updates on Alpine): upgrade the installed packages a host's package check flagged, mirroring security-updates.apt. apk upgrade with names upgrades only those installed packages (and what their new versions depend on); -U refreshes the index first (an old local index would report no upgrade, as in tailscale.update's apk line). The app fills {{packages}} from the host's own apk listing (/lib/apk/db/installed), each name re-checked, and the validators refuse {{packages}} in a security-updates intent anywhere but right after an upgrade verb (here the whole word upgrade). A kernel package (linux-lts, linux-virt) is replaced in place; the app never restarts the server."
+  },
+  {
+   "intent": "security-updates.dnf",
+   "selector": {
+    "families": [
+     "dnf"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.4 S5, host Security updates on AlmaLinux, Rocky Linux and RHEL): upgrade the installed packages a host's package check flagged, mirroring security-updates.apt and .apk. dnf upgrade with names upgrades only those installed packages (and what their new versions need); --refresh fetches fresh metadata first (an old cache would report nothing to upgrade). The app fills {{packages}} from the host's own rpm listing, each name re-checked; rpm names may be capitalised (NetworkManager, perl-DBI), which only this intent's {{packages}} accepts (recipes_lib.package_ok, HostRecipeTemplate the twin; validators of the same app release). With the running kernel's package named (kernel), dnf installs the new kernel next to the running one (installonly); it never restarts the server."
+  },
+  {
+   "intent": "server.restart",
+   "selector": {
+    "families": [
+     "any"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.4 S6, host Security updates, D5): restart the server so an installed kernel update takes effect. Never part of Install Updates: the app shows it as its own button, behind a confirmation, only when the running kernel is older than an installed one that carries the fix or the host says a reboot is required. systemctl reboot on systemd hosts, shutdown -r now where systemctl is missing or refuses."
+  },
+  {
+   "intent": "server.restart",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "New intent: Alpine (OpenRC, busybox) restarts with reboot."
+  }
+ ]
+}

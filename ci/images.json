@@ -51,6 +51,12 @@
       ]
     },
     {
+      "image": "almalinux:9",
+      "families": [
+        "dnf"
+      ]
+    },
+    {
       "image": "alpine:3.20",
       "families": [
         "apk",

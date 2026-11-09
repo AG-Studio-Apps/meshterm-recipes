@@ -226,7 +226,7 @@ def plan(doc, matrix, args):
                     user = ci.get("user") or ("root" if mode == "root" else "mt")
                     command = lib.render(variant["run"], sudo=(mode == "user"), user=user,
                                          packages=packages, port=ci.get("port"), proto=ci.get("proto"),
-                                         group=ci.get("group"), path=ci.get("path"))
+                                         group=ci.get("group"), path=ci.get("path"), intent=intent)
                     yield dict(image=image, mode=mode, family=family, intent=intent, variant=variant, native=native,
                                distro=distro_id, command=command, skip=why)
 

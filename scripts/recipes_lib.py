@@ -21,6 +21,30 @@ VARIANT_KEYS = {"families", "ids", "versions", "run", "admin", "ci", "minSchema"
 GROUP_OPENERS = ("-aG ", "-G ", "addgroup {{user}} ")
 # `{{packages}}` in sudo.install: only right after an install verb, or as a shell variable's value.
 SUDO_INSTALL_PACKAGE_OPENERS = ("install -y ", "add ", "-S --noconfirm ", 'p="')
+# `{{packages}}` in a `security-updates.*` intent (meshTerm docs/plan-host-cve-scanner.md 4.5, app 2.4): only right
+# after an UPGRADE verb, as whole words (the verb starts the line or follows a space). The names come from the host's
+# own package listing, so the line may only upgrade what is installed (an upgraded kernel meta package still brings
+# in its new kernel's own package) (HostRecipeTemplate.securityUpdatesPackageOpeners, the same list).
+SECURITY_UPDATES_PREFIX = "security-updates."
+SECURITY_UPDATES_PACKAGE_OPENERS = ("--only-upgrade -y ", "upgrade -y ", "upgrade ")
+# ... and (meshTerm S4 review L6) no install verb ANYWHERE before it: `apk add upgrade {{packages}}` would install a
+# package named upgrade plus every name, and `apt-get install upgrade {{packages}}` the same; dnf's `reinstall`,
+# `localinstall` and `groupinstall` are whole words of their own (S5 app review L4). The one install allowed is
+# apt-get's own upgrade-only form, `install --only-upgrade -y ` right before the names, and only in
+# security-updates.apt (HostRecipeTemplate.securityUpdatesInstallWords / securityUpdatesAptOpener /
+# securityUpdatesAptIntent, the same rule).
+SECURITY_UPDATES_INSTALL_WORDS = ("add", "install", "reinstall", "localinstall", "groupinstall")
+SECURITY_UPDATES_APT_OPENER = "install --only-upgrade -y "
+SECURITY_UPDATES_APT_INTENT = "security-updates.apt"
+
+
+def _ends_with_word(text, opener):
+    """`text` ends with `opener` as whole words: the opener starts the text or follows a space, so `--upgrade ` or
+    `foo-upgrade ` never pass for `upgrade ` (meshTerm S3 review B L3; HostRecipeTemplate.endsWithWord is the twin)."""
+    if not text.endswith(opener):
+        return False
+    head = text[: len(text) - len(opener)]
+    return head == "" or head.endswith(" ")
 PROTOS = ("tcp", "udp")
 GROUPS = ("sudo", "wheel")
 PATH_VALUE = re.compile(r"^/[A-Za-z0-9._/+-]{1,255}\Z")
@@ -67,6 +91,18 @@ ID_LIKE_INTENTS = ("ca-certificates.install", "compose.*", "engine.*", "git.inst
 # "systemd": false.
 SYSTEMD_INHERITANCE = ("engine.docker.rootless-prepare",)
 PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
+# meshTerm docs/plan-host-cve-scanner.md 3.4 (S5): EL binary rpm names may be capitalised (NetworkManager, perl-DBI,
+# ModemManager), and security-updates.dnf names the host's own rpm binaries. Only that intent's {{packages}} value
+# (and its ci.packages) takes them: every other intent keeps PACKAGE (HostRecipeTemplate.capitalisedPackageIntents,
+# HostRecipeDocument.isRpmPackageName: the same rule).
+RPM_PACKAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}\Z")
+CAPITALISED_PACKAGE_INTENTS = ("security-updates.dnf",)
+
+
+def package_ok(name, intent=None):
+    """A `{{packages}}` name for `intent`: PACKAGE, or RPM_PACKAGE for the intents that take rpm names."""
+    pattern = RPM_PACKAGE if intent in CAPITALISED_PACKAGE_INTENTS else PACKAGE
+    return isinstance(name, str) and bool(pattern.match(name))
 INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\Z")
 VERSION = re.compile(r"^[0-9]{1,9}(\.[0-9]{1,9}){0,5}\Z")
@@ -178,6 +214,14 @@ def parse_template(run, intent=None):
         elif name == "packages" and intent == "sudo.install":
             if not before.endswith(SUDO_INSTALL_PACKAGE_OPENERS):
                 raise RecipeError("{{packages}} in sudo.install only right after an install verb or as p=\"...\"")
+        elif name == "packages" and intent is not None and intent.startswith(SECURITY_UPDATES_PREFIX):
+            if not any(_ends_with_word(before, opener) for opener in SECURITY_UPDATES_PACKAGE_OPENERS):
+                raise RecipeError("{{packages}} in security-updates only right after an upgrade verb")
+            head = before[: len(before) - len(SECURITY_UPDATES_APT_OPENER)] \
+                if intent == SECURITY_UPDATES_APT_INTENT and _ends_with_word(before, SECURITY_UPDATES_APT_OPENER) \
+                else before
+            if any(contains_word(head, word) for word in SECURITY_UPDATES_INSTALL_WORDS):
+                raise RecipeError("an install verb (add, install, reinstall ...) before {{packages}} in security-updates")
         if name in PLACEHOLDERS:
             names.append(name)
         plain += " "
@@ -218,15 +262,16 @@ def user_word(user):
     return user if re.match(r"^[A-Za-z0-9._-]+$", user) else "'" + user.replace("'", "'\\''") + "'"
 
 
-def render(run, sudo, user=None, packages=None, port=None, proto=None, group=None, path=None):
+def render(run, sudo, user=None, packages=None, port=None, proto=None, group=None, path=None, intent=None):
     """The app's rendering (HostRecipeTemplate.render): ONE pass over the template, so a value is never read as a
-    placeholder. None when a used placeholder has no value, or a refused one (`{{user}}` alone defaults to $USER)."""
+    placeholder. None when a used placeholder has no value, or a refused one (`{{user}}` alone defaults to $USER).
+    `intent`: the template's intent (security-updates.dnf takes capitalised rpm names, package_ok)."""
     values = {"sudo": "sudo " if sudo else ""}
     if user is None:
         values["user"] = "$USER"
     elif user_word(user) is not None:
         values["user"] = user_word(user)
-    if packages and all(isinstance(p, str) and PACKAGE.match(p) for p in packages):
+    if packages and all(package_ok(p, intent) for p in packages):
         values["packages"] = " ".join(packages)
     if is_int(port) and 1 <= port <= 65535:
         values["port"] = str(port)
