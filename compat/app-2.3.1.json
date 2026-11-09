@@ -1,0 +1,213 @@
+{
+  "_comment": "What meshTerm 2.3.1's recipes reader does with a recipes file (MeshTermFailures HostRecipes, fr/recipes-v3; docs/recipes-v3-plan.md 2.1-2.2). Read by scripts/compat_check.py; kept honest by meshTerm's RecipesCompatProfileTests, which loads its copy of this file (Packages/MeshTermFailures/Tests/MeshTermFailuresTests/Fixtures/RecipesCompat/) and checks it against the Swift reader. Update both at every app release (docs/recipes-watch.md).",
+  "profile": "app-2.3.1",
+  "app": "2.3.1",
+  "channel": "app-store",
+  "blocking": true,
+  "released": false,
+  "fetchPaths": [
+    "v1/recipes.json"
+  ],
+  "reader": {
+    "kind": "host-recipes",
+    "maxBytes": 262144,
+    "maxRun": 2000,
+    "families": [
+      "apt",
+      "dnf",
+      "yum",
+      "apk",
+      "pacman",
+      "zypper",
+      "macos",
+      "unknown",
+      "windows",
+      "any"
+    ],
+    "privilegeWords": [
+      "sudo",
+      "su",
+      "doas",
+      "pkexec",
+      "run0"
+    ],
+    "sudoOpeners": [
+      "&& ",
+      "; ",
+      "then ",
+      "| "
+    ],
+    "userPlacement": "word-outside-quotes",
+    "schemas": [
+      1
+    ],
+    "supportedSchema": 1,
+    "placeholders": [
+      "sudo",
+      "user",
+      "packages",
+      "port",
+      "proto",
+      "group",
+      "path"
+    ],
+    "laterPlaceholders": "variant-unusable",
+    "laterPlaceholderPattern": "^[a-z][a-z0-9-]{0,31}$",
+    "variantKeys": [
+      "families",
+      "ids",
+      "versions",
+      "run",
+      "admin",
+      "ci",
+      "minSchema"
+    ],
+    "unknownVariantKeys": "variant-unusable",
+    "minSchema": "honoured",
+    "unusableSelection": "bundled-when-at-least-as-specific",
+    "renderFailure": "bundled",
+    "placement": {
+      "group": [
+        "-aG ",
+        "-G ",
+        "addgroup {{user}} "
+      ],
+      "packagesByIntent": {
+        "sudo.install": [
+          "install -y ",
+          "add ",
+          "-S --noconfirm ",
+          "p=\""
+        ]
+      }
+    },
+    "coverage": "bundled-family-fallbacks-including-unusable",
+    "rollback": "below-bundled-or-current",
+    "sameSerialDifferentBody": "refused"
+  },
+  "bundled": {
+    "file": "compat/bundled/serial-11.json",
+    "serial": 11,
+    "sha256": "c8340395b3df1d4f41735456e6ae7e573ba91088f5b1c9f630ecae8ac82e4ef1",
+    "_comment": "meshterm-recipes serial 11 with serial 12 folded in (James 2026-10-19), an UNPUBLISHED DRAFT: the file 2.3.1 must bundle IF it is released (tools/bundle-recipes.sh then). The 2.3.1 TestFlight build on meshTerm develop (b530d8d1) still bundles the pre-merge serial-11 draft (sha256 b12e3b6e...: the Windows -LiteralPath lines only) and refuses this file as same serial, different bytes; TestFlight only, it keeps its bundled lines."
+  },
+  "supplies": {
+    "_comment": "Placeholders the app fills, per intent, beyond {{sudo}} and {{user}} (always). A recipe using one the app does not pass for that intent renders nil and the app falls back to its bundled line. From the call sites: HostPackageCommands, PendingSetupPresenter, ContainerHostFixes, FirewallCommands, ServerCommands.",
+    "packages.install": [
+      "packages"
+    ],
+    "podman.rootless-prerequisites": [
+      "packages"
+    ],
+    "sudo.install": [
+      "packages",
+      "group"
+    ],
+    "sudo.grant": [
+      "group"
+    ],
+    "engine.docker.rootless-prepare": [
+      "path"
+    ],
+    "engine.rootless.apparmor-userns": [
+      "path"
+    ],
+    "firewall.*": [
+      "port",
+      "proto"
+    ]
+  },
+  "unprivilegedIntents": [
+    "agent.*",
+    "herdr.install"
+  ],
+  "notAsked": {
+    "podman.rootless-prerequisites": {
+      "ids": [
+        "alpine"
+      ],
+      "why": "meshTerm 2.3.0 and 2.3.1 never ask for this intent on Alpine: PendingSetupPresenter.prerequisites returns nil unless RootlessRemediation.installCommand(os:) (meshDeckShared EnvironmentDiscovery) gives the step's command, and installCommand(os: \"alpine\") is nil (it names only ubuntu, debian, raspbian, linuxmint, pop, fedora, rhel, centos, rocky, almalinux), so serial 11's apk line (serial 12 folded in) reaches only 2.3.2 (its ADD path). compat_check reports a selection change there as info (not-asked), never checks or counts it."
+    }
+  },
+  "intents": [
+    "tmux.install",
+    "packages.install",
+    "developer-tools.install",
+    "engine.docker.install-package",
+    "engine.docker.install-script",
+    "engine.docker.install-alpine",
+    "engine.docker.join-group",
+    "engine.podman.install",
+    "engine.docker-desktop.install",
+    "engine.orbstack.install",
+    "engine.docker.start-systemd",
+    "engine.docker.start-openrc",
+    "engine.podman.start-systemd",
+    "engine.podman.start-systemd-user",
+    "engine.podman.start-openrc",
+    "engine.containerd.start-systemd",
+    "engine.containerd.start-openrc",
+    "engine.apple.start",
+    "engine.docker-desktop.open",
+    "engine.orbstack.open",
+    "engine.colima.start",
+    "engine.podman-machine.start",
+    "compose.install-package",
+    "compose.install-docker-repo",
+    "compose.install-binary-docker",
+    "compose.install-binary-podman",
+    "podman.socket-user",
+    "podman.socket-system",
+    "podman.socket-openrc",
+    "podman.socket-service",
+    "podman.socket-restart-user",
+    "podman.socket-restart-system",
+    "podman.socket-restart-openrc",
+    "podman.socket-restart-service",
+    "podman.rootless-subids",
+    "podman.rootless-migrate",
+    "git.install",
+    "ca-certificates.install",
+    "podman.rootless-prerequisites",
+    "engine.docker.rootless-prepare",
+    "engine.docker.rootless-setup-and-start",
+    "engine.docker.install-complete",
+    "engine.docker.rootless-setup",
+    "engine.docker.rootless-enable",
+    "engine.docker.rootless-start",
+    "engine.rootless.linger",
+    "engine.rootless.apparmor-userns",
+    "engine.docker.start-service-systemd",
+    "engine.docker.start-socket-systemd",
+    "engine.containerd.rootless-setup",
+    "engine.containerd.start-service-systemd",
+    "engine.docker.start-service",
+    "engine.containerd.start-service",
+    "sudo.install",
+    "sudo.grant",
+    "ssh-server.install",
+    "sshd.reload",
+    "sshd.host-keys",
+    "tailscale.up-ssh",
+    "tailscale.set-ssh",
+    "firewall.ufw.allow",
+    "firewall.ufw.allow-from-tailnet",
+    "firewall.ufw.allow-on-tailscale0",
+    "firewall.firewalld.allow-ssh",
+    "firewall.firewalld.allow",
+    "firewall.firewalld.allow-from-tailnet",
+    "firewall.nft.allow",
+    "firewall.nft.allow-from-tailnet",
+    "firewall.iptables.allow",
+    "firewall.iptables.allow-from-tailnet",
+    "firewall.iptables.persist-openrc",
+    "agent.claude.install-official",
+    "agent.claude.install-homebrew",
+    "agent.claude.install-npm",
+    "agent.codex.install-official",
+    "agent.codex.install-homebrew",
+    "agent.codex.install-npm",
+    "agent.agy.install-official",
+    "herdr.install"
+  ]
+}

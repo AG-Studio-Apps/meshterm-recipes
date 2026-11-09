@@ -1,0 +1,317 @@
+{
+  "_comment": "What meshTerm 2.4.1's (reader unchanged since 2.4.0, the host Security updates build; docs/plan-host-cve-scanner.md S1) recipes reader does with a recipes file (MeshTermFailures HostRecipes, fr/recipes-v3; docs/recipes-v3-plan.md 2.1-2.2). Read by scripts/compat_check.py; kept honest by meshTerm's RecipesCompatProfileTests, which loads its copy of this file (Packages/MeshTermFailures/Tests/MeshTermFailuresTests/Fixtures/RecipesCompat/) and checks it against the Swift reader. Update both at every app release (docs/recipes-watch.md).",
+  "profile": "app-2.4.1",
+  "app": "2.4.1",
+  "channel": "app-store",
+  "blocking": true,
+  "released": false,
+  "fetchPaths": [
+    "v1/recipes.json"
+  ],
+  "reader": {
+    "kind": "host-recipes",
+    "maxBytes": 262144,
+    "maxRun": 2000,
+    "families": [
+      "apt",
+      "dnf",
+      "yum",
+      "apk",
+      "pacman",
+      "zypper",
+      "macos",
+      "unknown",
+      "windows",
+      "any"
+    ],
+    "privilegeWords": [
+      "sudo",
+      "su",
+      "doas",
+      "pkexec",
+      "run0"
+    ],
+    "sudoOpeners": [
+      "&& ",
+      "; ",
+      "then ",
+      "| "
+    ],
+    "userPlacement": "word-outside-quotes",
+    "schemas": [
+      1
+    ],
+    "supportedSchema": 1,
+    "placeholders": [
+      "sudo",
+      "user",
+      "packages",
+      "port",
+      "proto",
+      "group",
+      "path"
+    ],
+    "laterPlaceholders": "variant-unusable",
+    "laterPlaceholderPattern": "^[a-z][a-z0-9-]{0,31}$",
+    "variantKeys": [
+      "families",
+      "ids",
+      "versions",
+      "run",
+      "admin",
+      "ci",
+      "minSchema"
+    ],
+    "unknownVariantKeys": "variant-unusable",
+    "minSchema": "honoured",
+    "unusableSelection": "bundled-when-at-least-as-specific",
+    "renderFailure": "bundled",
+    "placement": {
+      "group": [
+        "-aG ",
+        "-G ",
+        "addgroup {{user}} "
+      ],
+      "packagesByIntent": {
+        "sudo.install": [
+          "install -y ",
+          "add ",
+          "-S --noconfirm ",
+          "p=\""
+        ],
+        "security-updates.*": [
+          "--only-upgrade -y ",
+          "upgrade -y ",
+          "upgrade "
+        ]
+      },
+      "_packagesRules": "meshTerm S3 review B L3, S4 review L6, S5 app review M2 / L4 (HostRecipeTemplate): packagesByIntent keys are fnmatch patterns. For an intent matching packagesWholeWord the opener must be whole words (it starts the text before {{packages}} or follows a space). For an intent matching a packagesNoInstallWordBefore key, none of its words may appear as a whole word anywhere before {{packages}}, except that an intent named in packagesInstallWordException may end with that exact opener (it is taken off before the check). capitalisedPackageIntents take rpm names (rpmPackageName) in {{packages}}; every other intent the lowercase package name.",
+      "packagesWholeWord": [
+        "security-updates.*"
+      ],
+      "packagesNoInstallWordBefore": {
+        "security-updates.*": [
+          "add",
+          "install",
+          "reinstall",
+          "localinstall",
+          "groupinstall"
+        ]
+      },
+      "packagesInstallWordException": {
+        "security-updates.apt": "install --only-upgrade -y "
+      },
+      "capitalisedPackageIntents": [
+        "security-updates.dnf"
+      ],
+      "rpmPackageName": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$"
+    },
+    "coverage": "bundled-family-fallbacks-including-unusable",
+    "rollback": "below-bundled-or-current",
+    "sameSerialDifferentBody": "refused",
+    "idLike": "top-level-allowlist",
+    "maxIdLike": 16,
+    "classifierIds": [
+      "ubuntu",
+      "debian",
+      "raspbian",
+      "linuxmint",
+      "pop",
+      "fedora",
+      "rhel",
+      "centos",
+      "rocky",
+      "almalinux",
+      "alpine"
+    ],
+    "classifierFamilies": {
+      "apt": [
+        "ubuntu",
+        "debian",
+        "raspbian",
+        "linuxmint",
+        "pop"
+      ],
+      "dnf": [
+        "fedora",
+        "rhel",
+        "centos",
+        "rocky",
+        "almalinux"
+      ],
+      "apk": [
+        "alpine"
+      ]
+    },
+    "parentFamilies": {
+      "ubuntu": "apt",
+      "debian": "apt",
+      "raspbian": "apt",
+      "linuxmint": "apt",
+      "pop": "apt",
+      "fedora": "dnf",
+      "rhel": "dnf",
+      "centos": "dnf",
+      "rocky": "dnf",
+      "almalinux": "dnf",
+      "alpine": "apk"
+    },
+    "idLikeIntents": [
+      "ca-certificates.install",
+      "compose.*",
+      "engine.*",
+      "git.install",
+      "podman.*",
+      "sudo.grant",
+      "sudo.install"
+    ],
+    "familyRoots": [
+      "alpine",
+      "arch",
+      "centos",
+      "debian",
+      "fedora",
+      "gentoo",
+      "mandriva",
+      "opensuse",
+      "rhel",
+      "slackware",
+      "suse",
+      "ubuntu"
+    ],
+    "_idLike": "docs/container-idlike-alpine-plan.md (recipes serial 11, serial 12 folded in): the top-level idLike allowlist is read (null = absent; a malformed one refuses the file); the ID_LIKE parent is resolved from the file in use (never for an id any intent names or classifierIds, the Containers family lists in ContainerHostOS.family; otherwise ID_LIKE is walked in order: an allowlisted token is the parent, a familyRoots token off the list stops with no parent, any other token is skipped) and reaches the bundled fallback unchanged; the parent is passed only for the idLikeIntents (HostRecipeIntent.idLikePatterns: the Containers intents in 2.3.2) and resolved per lookup from the host's ID_LIKE (never a kept parent), with the id and tokens trimmed and lower-cased; weights id 8, parent 6 (never with versions), range 2, family 1, any 0; an intent with a versioned variant naming the parent drops only the parent (not an inherited family). parentFamilies (stage C, ContainerHostOS.parentFamilies: classifierFamilies by id): when the parent resolves for a host whose own family is unknown, the lookup takes the parent's recipe family from it, marked inherited (version-only lines then do not match), resolved with the parent from the same file so the kill switch turns it back; a parent with no entry (arch) stays unknown. classifierIds is ContainerHostOS.classifierIDs and classifierFamilies its per-family lists as recipe families (debianIDs -> apt, fedoraIDs -> dnf, alpineIDs -> apk; any other id is unknown), both checked by MeshTermContainerEngine's ContainerHostClassifierTests."
+  },
+  "bundled": {
+    "file": "compat/bundled/serial-12.json",
+    "serial": 12,
+    "sha256": "36b5a862d488176af9ef004278fc6978f10e81e46029e275cd77a44fb01a39f7",
+    "_comment": "meshterm-recipes serial 12 as published (signed 2026-11-05, commit 84b1a3a7874b, primary key). Written by meshTerm tools/bundle-recipes.sh."
+  },
+  "supplies": {
+    "_comment": "Placeholders the app fills, per intent, beyond {{sudo}} and {{user}} (always). A recipe using one the app does not pass for that intent renders nil and the app falls back to its bundled line. From the call sites: HostPackageCommands, PendingSetupPresenter, ContainerHostFixes, FirewallCommands, ServerCommands.",
+    "packages.install": [
+      "packages"
+    ],
+    "podman.rootless-prerequisites": [
+      "packages"
+    ],
+    "sudo.install": [
+      "packages",
+      "group"
+    ],
+    "sudo.grant": [
+      "group"
+    ],
+    "engine.docker.rootless-prepare": [
+      "path"
+    ],
+    "engine.rootless.apparmor-userns": [
+      "path"
+    ],
+    "firewall.*": [
+      "port",
+      "proto"
+    ],
+    "security-updates.apt": [
+      "packages"
+    ],
+    "security-updates.apk": [
+      "packages"
+    ],
+    "security-updates.dnf": [
+      "packages"
+    ]
+  },
+  "unprivilegedIntents": [
+    "agent.*",
+    "herdr.install"
+  ],
+  "intents": [
+    "tmux.install",
+    "packages.install",
+    "developer-tools.install",
+    "engine.docker.install-package",
+    "engine.docker.install-script",
+    "engine.docker.install-alpine",
+    "engine.docker.join-group",
+    "engine.podman.install",
+    "engine.docker-desktop.install",
+    "engine.orbstack.install",
+    "engine.docker.start-systemd",
+    "engine.docker.start-openrc",
+    "engine.podman.start-systemd",
+    "engine.podman.start-systemd-user",
+    "engine.podman.start-openrc",
+    "engine.containerd.start-systemd",
+    "engine.containerd.start-openrc",
+    "engine.apple.start",
+    "engine.docker-desktop.open",
+    "engine.orbstack.open",
+    "engine.colima.start",
+    "engine.podman-machine.start",
+    "compose.install-package",
+    "compose.install-docker-repo",
+    "compose.install-binary-docker",
+    "compose.install-binary-podman",
+    "podman.socket-user",
+    "podman.socket-system",
+    "podman.socket-openrc",
+    "podman.socket-service",
+    "podman.socket-restart-user",
+    "podman.socket-restart-system",
+    "podman.socket-restart-openrc",
+    "podman.socket-restart-service",
+    "podman.rootless-subids",
+    "podman.rootless-migrate",
+    "git.install",
+    "ca-certificates.install",
+    "podman.rootless-prerequisites",
+    "engine.docker.rootless-prepare",
+    "engine.docker.rootless-setup-and-start",
+    "engine.docker.install-complete",
+    "engine.docker.rootless-setup",
+    "engine.docker.rootless-enable",
+    "engine.docker.rootless-start",
+    "engine.rootless.linger",
+    "engine.rootless.apparmor-userns",
+    "engine.docker.start-service-systemd",
+    "engine.docker.start-socket-systemd",
+    "engine.containerd.rootless-setup",
+    "engine.containerd.start-service-systemd",
+    "engine.docker.start-service",
+    "engine.containerd.start-service",
+    "sudo.install",
+    "sudo.grant",
+    "ssh-server.install",
+    "sshd.reload",
+    "sshd.host-keys",
+    "tailscale.up-ssh",
+    "tailscale.set-ssh",
+    "firewall.ufw.allow",
+    "firewall.ufw.allow-from-tailnet",
+    "firewall.ufw.allow-on-tailscale0",
+    "firewall.firewalld.allow-ssh",
+    "firewall.firewalld.allow",
+    "firewall.firewalld.allow-from-tailnet",
+    "firewall.nft.allow",
+    "firewall.nft.allow-from-tailnet",
+    "firewall.iptables.allow",
+    "firewall.iptables.allow-from-tailnet",
+    "firewall.iptables.persist-openrc",
+    "agent.claude.install-official",
+    "agent.claude.install-homebrew",
+    "agent.claude.install-npm",
+    "agent.codex.install-official",
+    "agent.codex.install-homebrew",
+    "agent.codex.install-npm",
+    "agent.agy.install-official",
+    "herdr.install",
+    "tailscale.update",
+    "tailscale.update.detached",
+    "tailscale.auto-update",
+    "security-updates.apt",
+    "security-updates.apk",
+    "security-updates.dnf",
+    "server.restart"
+  ]
+}

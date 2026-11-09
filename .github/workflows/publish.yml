@@ -105,7 +105,7 @@ jobs:
           fi
           git cat-file -e "$sha^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          changed=$(git diff --name-only "$sha" HEAD -- .github scripts keys ci)
+          changed=$(git diff --name-only "$sha" HEAD -- .github scripts keys ci compat)
           if [ -n "$changed" ]; then
             {
               echo '> [!WARNING]'
@@ -117,7 +117,7 @@ jobs:
               done
               echo
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning::This push changes .github/, scripts/, keys/ or ci/; read the diff before approving the signature."
+            echo "::warning::This push changes .github/, scripts/, keys/, ci/ or compat/; read the diff before approving the signature."
           fi
 
       - name: Install minisign
@@ -142,6 +142,25 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           else
             python3 scripts/validate.py
+          fi
+
+      # The pre-sign compat gate (scripts/compat_check.py): every shipped app's recipes reader, from its profile in
+      # compat/ (meshTerm keeps the originals in MeshTermFailures' RecipesCompat test fixtures, pinned to the Swift
+      # reader), must still accept this file where it accepted the deployed one and must not run a line meant for a
+      # later app. A blocking (App Store) profile failing stops the publish before signing; a TestFlight-only profile
+      # only warns. Add compat/app-<version>.json (and its compat/bundled/ file) at every app release.
+      - name: Old app versions still read it (compat profiles)
+        env:
+          DEPLOYED_SHA: ${{ steps.deployed.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/compat_check.py --self-test | grep -v "^ok "
+          if [ -n "$DEPLOYED_SHA" ]; then
+            git show "$DEPLOYED_SHA:recipes.json" > "$RUNNER_TEMP/deployed-recipes.json"
+            python3 scripts/compat_check.py --candidate recipes.json --previous "$RUNNER_TEMP/deployed-recipes.json" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          else
+            python3 scripts/compat_check.py --candidate recipes.json --summary "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Check the public keys are the pinned ones
