@@ -630,11 +630,11 @@ def self_test():
         cases.append(ok)
         print(("ok  " if ok else "FAIL") + f"  {label}" + ("" if ok else f"\n      got {sorted(got)}"))
 
-    # 1. The serial-3 draft: 2.3.0 accepts it (its own bundled copy, serial 3); TF refuses ({{path}} etc.).
+    # 1. 2.3.0 accepts its own bundled copy (s3: whatever serial 2.3.0 bundles, today 9); TF refuses it ({{path}} etc.).
     got, doc = kinds("app-2.3.0", by_name["app-2.3.0"]["_bundled_bytes"])
     case("2.3.0 accepts its own bundled bytes", got, want_absent=[("fail", "refuses-file", "")])
-    got, _ = kinds("testflight-serial2", bump(s3, s3["serial"]), s2)
-    case("TF serial-2 refuses serial 3 (unknown placeholder) where it accepted serial 2", got,
+    got, _ = kinds("testflight-serial2", s3, s2)
+    case("TF serial-2 refuses 2.3.0's bundled serial (unknown placeholder) where it accepted serial 2", got,
          [("fail", "refuses-file", "")])
     # 2. A later selector key: TF ignores it and would RUN the line; 2.3.0 defers to its bundled copy.
     later = bump(s3, s3["serial"] + 1)

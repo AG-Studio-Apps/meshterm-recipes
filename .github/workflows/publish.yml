@@ -154,7 +154,7 @@ jobs:
           DEPLOYED_SHA: ${{ steps.deployed.outputs.sha }}
         run: |
           set -euo pipefail
-          python3 scripts/compat_check.py --self-test >/dev/null
+          python3 scripts/compat_check.py --self-test | grep -v "^ok "
           if [ -n "$DEPLOYED_SHA" ]; then
             git show "$DEPLOYED_SHA:recipes.json" > "$RUNNER_TEMP/deployed-recipes.json"
             python3 scripts/compat_check.py --candidate recipes.json --previous "$RUNNER_TEMP/deployed-recipes.json" \
