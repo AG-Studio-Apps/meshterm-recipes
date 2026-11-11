@@ -11,7 +11,7 @@ KIND = "host-recipes"
 SCHEMA = 1
 MAX_BYTES = 256 * 1024
 MAX_RUN = 2000
-PLACEHOLDERS = {"sudo", "user", "packages", "port", "proto", "group", "path"}
+PLACEHOLDERS = {"sudo", "user", "packages", "port", "proto", "group", "path", "runid"}
 # A placeholder name a LATER app may know: a variant using one is unusable here (the app falls back to its bundled
 # copy for that intent and OS), never a refused file. Anything else between {{ }} refuses the file.
 FUTURE_PLACEHOLDER = re.compile(r"^[a-z][a-z0-9-]{0,31}\Z")
@@ -96,7 +96,75 @@ PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}\Z")
 # (and its ci.packages) takes them: every other intent keeps PACKAGE (HostRecipeTemplate.capitalisedPackageIntents,
 # HostRecipeDocument.isRpmPackageName: the same rule).
 RPM_PACKAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}\Z")
-CAPITALISED_PACKAGE_INTENTS = ("security-updates.dnf",)
+CAPITALISED_PACKAGE_INTENTS = ("security-updates.dnf", "detached.updates.dnf")
+# meshTerm docs/plan-2.5-navigation.md S9.2 (serial 13, app 2.5): a `detached.<kind>.<family>` intent runs a package
+# command on the server, away from the SSH connection (systemd-run, else setsid). Its template has ONE shape, checked
+# here exactly (HostRecipeTemplate.detachedShape and friends are the twins):
+#
+#   {{sudo}}sh -c '<L>' meshterm-<kind>-{{runid}} {{user}} '<B>'[ {{packages}}]
+#
+# `<L>` (the launcher) and `<B>` (the body) are single-quoted scripts with no placeholder inside: every value reaches
+# them as a positional argument. ` {{packages}}` ends the text when, and only when, `<kind>` is in
+# DETACHED_PACKAGE_KINDS. `<B>` has no `${` and no `$$` (on the systemd path it is a unit argument, and systemd would
+# expand both). `"$@"` (the package names) appears in `<B>` exactly once with {{packages}}, right after an upgrade
+# opener with no install word before it (the security-updates rule; apt-get's `install --only-upgrade -y ` only in
+# detached.updates.apt), and never without; in `<L>` only as the argument list of DETACHED_START. No other `$@` and no
+# `$*` in either. `{{runid}}` (8 lowercase hex, the app's run id) is refused in every other intent.
+DETACHED_PREFIX = "detached."
+DETACHED_INTENT = re.compile(r"^detached\.([a-z0-9]+(?:-[a-z0-9]+)*)\.([a-z0-9]+(?:-[a-z0-9]+)*)\Z")
+DETACHED_SHAPE = re.compile(r"\{\{sudo\}\}sh -c '([^']*)' meshterm-([a-z0-9]+(?:-[a-z0-9]+)*)-\{\{runid\}\} "
+                            r"\{\{user\}\} '([^']*)'((?: \{\{packages\}\})?)\Z")
+DETACHED_START = 'sh -c "$b" $n $k "$@"'
+DETACHED_PACKAGE_KINDS = ("updates",)
+DETACHED_APT_INTENT = "detached.updates.apt"
+RUN_ID = re.compile(r"^[0-9a-f]{8}\Z")
+
+
+def is_detached(intent):
+    return isinstance(intent, str) and intent.startswith(DETACHED_PREFIX)
+
+
+def detached_parts(run):
+    """(launcher, kind, body, has_packages) of a template in the detached shape, None when it is not in it."""
+    match = DETACHED_SHAPE.match(run) if isinstance(run, str) else None
+    return (match.group(1), match.group(2), match.group(3), bool(match.group(4))) if match else None
+
+
+def check_detached(run, intent):
+    """Raise RecipeError unless `run` is exactly the detached shape for `intent` (S9.2, rules 1-5)."""
+    intent_match = DETACHED_INTENT.match(intent)
+    if not intent_match:
+        raise RecipeError("a detached intent is detached.<kind>.<family>")
+    parts = detached_parts(run)
+    if parts is None:
+        raise RecipeError("a detached intent's run is {{sudo}}sh -c '<launcher>' meshterm-<kind>-{{runid}} {{user}} "
+                          "'<body>' (then {{packages}} for an updates run)")
+    launcher, kind, body, has_packages = parts
+    if kind != intent_match.group(1):
+        raise RecipeError(f"the run name's kind {kind!r} is not the intent's {intent_match.group(1)!r}")
+    if has_packages != (kind in DETACHED_PACKAGE_KINDS):
+        raise RecipeError("{{packages}} ends a detached run when, and only when, its kind is updates")
+    for script in (launcher, body):
+        if "{{" in script or "}}" in script:
+            raise RecipeError("no placeholder inside a detached run's quoted scripts")
+        if "$*" in script:
+            raise RecipeError("no $* in a detached run's scripts")
+    if "${" in body or "$$" in body:
+        raise RecipeError("no ${ or $$ in a detached body (systemd expands both in a unit's arguments)")
+    starts = launcher.count(DETACHED_START)
+    if launcher.count("$@") != starts or launcher.count('"$@"') != starts:
+        raise RecipeError('"$@" in a detached launcher only as the argument list of ' + DETACHED_START)
+    names = body.count('"$@"')
+    if body.count("$@") != names or names != (1 if has_packages else 0):
+        raise RecipeError('"$@" in a detached body exactly once with {{packages}}, never without')
+    if has_packages:
+        before = body[: body.index('"$@"')]
+        if not any(_ends_with_word(before, opener) for opener in SECURITY_UPDATES_PACKAGE_OPENERS):
+            raise RecipeError('"$@" in a detached body only right after an upgrade verb')
+        head = before[: len(before) - len(SECURITY_UPDATES_APT_OPENER)] \
+            if intent == DETACHED_APT_INTENT and _ends_with_word(before, SECURITY_UPDATES_APT_OPENER) else before
+        if any(contains_word(head, word) for word in SECURITY_UPDATES_INSTALL_WORDS):
+            raise RecipeError('an install verb (add, install, reinstall ...) before "$@" in a detached body')
 
 
 def package_ok(name, intent=None):
@@ -239,6 +307,12 @@ def parse_template(run, intent=None):
         if c == "\\" and ((i > 0 and run[i - 1].isalpha()) or (i + 1 < len(run) and run[i + 1].isalpha())):
             raise RecipeError("a backslash next to a letter (an escaped command word)")
     check_user_placement(run)
+    if "runid" in names and not is_detached(intent):
+        raise RecipeError("{{runid}} only in a detached.* intent")
+    if is_detached(intent):
+        if any(names.count(name) != 1 for name in ("sudo", "runid", "user")):
+            raise RecipeError("{{sudo}}, {{runid}} and {{user}} once each in a detached run")
+        check_detached(run, intent)
     return names, unknown
 
 
@@ -262,12 +336,16 @@ def user_word(user):
     return user if re.match(r"^[A-Za-z0-9._-]+$", user) else "'" + user.replace("'", "'\\''") + "'"
 
 
-def render(run, sudo, user=None, packages=None, port=None, proto=None, group=None, path=None, intent=None):
+def render(run, sudo, user=None, packages=None, port=None, proto=None, group=None, path=None, intent=None,
+           runid=None):
     """The app's rendering (HostRecipeTemplate.render): ONE pass over the template, so a value is never read as a
     placeholder. None when a used placeholder has no value, or a refused one (`{{user}}` alone defaults to $USER).
-    `intent`: the template's intent (security-updates.dnf takes capitalised rpm names, package_ok)."""
+    `intent`: the template's intent (security-updates.dnf takes capitalised rpm names, package_ok). `runid`: 8
+    lowercase hex. A detached.* run needs the real user (never `$USER`: under `su -c` it would read root)."""
     values = {"sudo": "sudo " if sudo else ""}
-    if user is None:
+    if user is None and is_detached(intent):
+        pass
+    elif user is None:
         values["user"] = "$USER"
     elif user_word(user) is not None:
         values["user"] = user_word(user)
@@ -281,6 +359,8 @@ def render(run, sudo, user=None, packages=None, port=None, proto=None, group=Non
         values["group"] = group
     if is_path_value(path):
         values["path"] = path
+    if isinstance(runid, str) and RUN_ID.match(runid):
+        values["runid"] = runid
     out, rest = "", run
     while "{{" in rest:
         start = rest.index("{{")

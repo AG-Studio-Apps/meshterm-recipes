@@ -12,7 +12,9 @@ renders it the way the app does, and runs it in a FRESH container (one at a time
          emptied again after sudo is installed, so a recipe still has to refresh them itself).
   su     the app's `su -c '...'` form for a host with no sudo (the root password): the bare form, run through
          `su -c` from `mt`'s LOGIN shell, so it gets that user's PATH (on Debian no /usr/sbin or /sbin), as on a
-         real host. Only variants with `ci.su` on images marked `suMode` in ci/images.json.
+         real host, behind the root PATH line every app `su -c` form starts with (meshTerm SuRoot.command;
+         SU_PATH_LINE here, not repeated for a line that already starts with it), so a bare `dpkg --configure -a`
+         finds ldconfig as it does in the app. Only variants with `ci.su` on images marked `suMode` in ci/images.json.
 
 then runs the variant's `ci.check` as root (MT_USER names the user the recipe ran as). A variant's `ci` block says
 what to skip (`skip`, `skipOn`, `rootOnly`, `userOnly`), what to install first as root (`needs`, ids from the
@@ -26,6 +28,16 @@ expression): then it passes only when the failing case's output matches it, and 
     scripts/run-recipes.py --intent tmux.install --intent git.install
     scripts/run-recipes.py --list                        # print what would run, without Docker
     scripts/run-recipes.py --summary "$GITHUB_STEP_SUMMARY"
+    scripts/run-recipes.py --systemd-pid1 --image ubuntu:24.04   # the detached.* lines on the systemd path
+
+`--systemd-pid1` (meshTerm docs/plan-2.5-navigation.md S9.8, serial 13): the fresh-distro containers above have no
+init, so a `detached.*` line there always takes its setsid path. This mode builds each SYSTEMD_IMAGES image with
+systemd and sudo, starts it with systemd as PID 1 (`/sbin/init`, `--cgroupns=host`, tmpfs `/run` and `/run/lock`,
+the cgroup v2 hierarchy mounted read-write), runs every `detached.*` variant for the image's family rendered as the
+app renders it (root and the sudo user, a fresh container per case), and asserts that the transient unit
+`meshterm-<kind>-<id>` ran and ended cleanly (systemd logged it "Deactivated successfully", so the systemd path was
+taken and not setsid), then the variant's own `ci.check` (the claimed state holds `pid=<digits>` and `rc=0`,
+`ended=` is set, `/run/meshterm-pkg.lock` is gone, the log holds the package tool's output).
 
 Exit status 1 when any case FAILs (an unexpected failure, or a check that does not hold).
 """
@@ -33,6 +45,7 @@ import argparse
 import json
 import os
 import re
+import secrets
 import shlex
 import subprocess
 import sys
@@ -46,6 +59,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TIMEOUT = 20 * 60
 # How much of a failing case's output (stdout and stderr, interleaved) the log and the summary show.
 TAIL_LINES = 30
+# meshTerm SuRoot.pathLine: the app's every `su -c` form starts with it (not twice when the line already does).
+SU_PATH_LINE = 'PATH="$PATH:/usr/sbin:/sbin"; '
 # The image's own package-manager family (for `needs` and the sudo set-up), from os-release ID / ID_LIKE.
 NATIVE = {"debian": "apt", "ubuntu": "apt", "fedora": "dnf", "rocky": "dnf", "rockylinux": "dnf", "rhel": "dnf", "almalinux": "dnf",
           "centos": "dnf", "alpine": "apk", "amzn": "dnf", "amazonlinux": "dnf", "arch": "pacman", "archlinux": "pacman",
@@ -224,11 +239,22 @@ def plan(doc, matrix, args):
                     # `{{user}}` is the case's own user, as the app renders a known SSH user (not `$USER`, which a
                     # root `docker run` does not set); `ci.user` names another (root setting sudo up FOR a user).
                     user = ci.get("user") or ("root" if mode == "root" else "mt")
+                    # `{{runid}}` (detached.* lines): a fresh 8-hex id per case, as the app makes one per tap.
+                    runid = secrets.token_hex(4)
                     command = lib.render(variant["run"], sudo=(mode == "user"), user=user,
                                          packages=packages, port=ci.get("port"), proto=ci.get("proto"),
-                                         group=ci.get("group"), path=ci.get("path"), intent=intent)
+                                         group=ci.get("group"), path=ci.get("path"), intent=intent, runid=runid)
                     yield dict(image=image, mode=mode, family=family, intent=intent, variant=variant, native=native,
-                               distro=distro_id, command=command, skip=why)
+                               distro=distro_id, command=command, skip=why, runid=runid)
+
+
+def su_form(bare):
+    """The app's `su -c` body for `bare` (SuRoot.command, without the outer quoting): the root PATH line first,
+    unless the line already starts with it as its own statement."""
+    path = SU_PATH_LINE[:-2]
+    if bare.startswith(path) and (bare[len(path):].startswith("; ") or bare[len(path):].startswith(" && ")):
+        return bare
+    return SU_PATH_LINE + bare
 
 
 def run_case(doc, case):
@@ -264,7 +290,8 @@ def run_case(doc, case):
     lines.append(f"sh -c {shlex.quote(ci['check'])} >/dev/null || {{ echo '--- check failed'; exit 11; }}")
     with tempfile.TemporaryDirectory() as tmp:
         with open(os.path.join(tmp, "recipe.sh"), "w") as handle:
-            handle.write(case["command"] + "\n")
+            handle.write(su_form(case["command"]) if case["mode"] == "su" else case["command"])
+            handle.write("\n")
         with open(os.path.join(tmp, "case.sh"), "w") as handle:
             handle.write("\n".join(lines) + "\n")
         os.chmod(tmp, 0o755)
@@ -280,6 +307,138 @@ def run_case(doc, case):
             partial = error.stdout or b""
             code, output = 124, (partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial) + "\ntimed out"
         return code, output, time.time() - started
+
+
+# --systemd-pid1: the images, their family, and what each needs to boot systemd as PID 1 with a sudo user `mt`.
+SYSTEMD_IMAGES = {"ubuntu:24.04": "apt", "rockylinux/rockylinux:9": "dnf"}
+SYSTEMD_PREP = {
+    "apt": "apt-get update -qq && apt-get install -y -qq systemd systemd-sysv sudo >/dev/null && rm -rf /var/lib/apt/lists/*",
+    "dnf": "dnf install -y -q systemd sudo util-linux >/dev/null && dnf clean all >/dev/null",
+}
+SYSTEMD_RUN_FLAGS = ["--cgroupns=host", "--tmpfs", "/run", "--tmpfs", "/run/lock",
+                     "-v", "/sys/fs/cgroup:/sys/fs/cgroup:rw"]
+
+
+def systemd_image(image):
+    """Build (once per run) `image` with systemd and the sudo user; returns the local tag."""
+    native = SYSTEMD_IMAGES[image]
+    tag = "mt-recipes-systemd:" + re.sub(r"[^a-z0-9.-]+", "-", image.lower())
+    dockerfile = (f"FROM {image}\nRUN {SYSTEMD_PREP[native]} && useradd -m -s /bin/sh mt "
+                  "&& echo 'mt ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/mt && chmod 0440 /etc/sudoers.d/mt\n"
+                  "STOPSIGNAL SIGRTMIN+3\nCMD [\"/sbin/init\"]\n")
+    with tempfile.TemporaryDirectory() as context:
+        subprocess.run(["docker", "build", "-q", "-t", tag, "-f", "-", context], input=dockerfile.encode(),
+                       check=True, stdout=subprocess.DEVNULL, timeout=1800)
+    return tag
+
+
+def systemd_case(doc, case, tag):
+    """One detached.* case on a booted systemd container: (code, output, seconds), codes as run_case's."""
+    ci = case["variant"]["ci"]
+    kind = case["intent"].split(".")[1]
+    unit = f"meshterm-{kind}-{case['runid']}"
+    lines = ["set -e", "export DEBIAN_FRONTEND=noninteractive"]
+    prep = needs_line(doc, ci, case["native"])
+    if prep:
+        lines.append("{ " + prep + "; } >/dev/null 2>&1 || true")
+    if ci.get("before"):
+        lines.append(ci["before"] + " >/dev/null")
+    user = "root" if case["mode"] == "root" else "mt"
+    lines.append(f"export MT_USER={user}")
+    lines.append("echo '--- recipe'")
+    if case["mode"] == "user":
+        lines.append("set +e; su mt -s /bin/sh -c 'cd && sh /t/recipe.sh' </dev/null; rc=$?; set -e")
+    else:
+        lines.append("set +e; (cd /root && sh /t/recipe.sh) </dev/null; rc=$?; set -e")
+    lines.append('[ "$rc" = 0 ] || { echo "--- recipe exit $rc"; exit 10; }')
+    # The unit ends (gone, or no longer active / activating), then systemd must have logged its clean end: the
+    # systemd path ran (an exec failure there takes setsid, which this job must not pass).
+    lines.append(f"i=0; while [ $i -lt 900 ]; do case \"$(systemctl is-active {unit} 2>/dev/null)\" in "
+                 "active|activating|deactivating|reloading) i=$((i+1)); sleep 1;; *) break;; esac; done")
+    lines.append(f"journalctl --no-pager -o cat -u {unit} | grep -q 'Deactivated successfully' "
+                 f"|| {{ echo '--- {unit} did not run under systemd:'; journalctl --no-pager -o cat -u {unit} | tail -5; exit 11; }}")
+    lines.append("echo '--- check'")
+    lines.append(f"sh -c {shlex.quote(ci['check'])} >/dev/null || {{ echo '--- check failed'; "
+                 "tr '\\n' ' ' </var/log/meshterm/run.state; cat /var/log/meshterm/*.state; tail -5 /var/log/meshterm/*.log; exit 11; }")
+    started = time.time()
+    container = subprocess.run(["docker", "run", "-d", "--rm", *SYSTEMD_RUN_FLAGS, tag], check=True,
+                               capture_output=True, text=True, timeout=300).stdout.strip()
+    try:
+        for _ in range(120):
+            state = subprocess.run(["docker", "exec", container, "systemctl", "is-system-running"],
+                                   capture_output=True, text=True).stdout.strip()
+            if state in ("running", "degraded"):
+                break
+            time.sleep(0.5)
+        else:
+            return 1, f"systemd did not start (is-system-running: {state})", time.time() - started
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "recipe.sh"), "w") as handle:
+                handle.write(case["command"] + "\n")
+            with open(os.path.join(tmp, "case.sh"), "w") as handle:
+                handle.write("\n".join(lines) + "\n")
+            subprocess.run(["docker", "exec", container, "mkdir", "-p", "/t"], check=True)
+            for name in ("recipe.sh", "case.sh"):
+                subprocess.run(["docker", "cp", os.path.join(tmp, name), f"{container}:/t/{name}"], check=True,
+                               stdout=subprocess.DEVNULL)
+            subprocess.run(["docker", "exec", container, "chmod", "-R", "a+rX", "/t"], check=True)
+        try:
+            result = subprocess.run(["docker", "exec", container, "sh", "/t/case.sh"], stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, timeout=TIMEOUT)
+            return result.returncode, result.stdout.decode("utf-8", "replace"), time.time() - started
+        except subprocess.TimeoutExpired:
+            return 124, "timed out", time.time() - started
+    finally:
+        subprocess.run(["docker", "rm", "-f", container], capture_output=True)
+
+
+def systemd_main(doc, args):
+    """--systemd-pid1: every detached.* case on SYSTEMD_IMAGES (or --image), root and sudo user."""
+    images = [i for i in SYSTEMD_IMAGES if not args.image or i in args.image]
+    unknown = [i for i in (args.image or []) if i not in SYSTEMD_IMAGES]
+    if unknown:
+        print(f"FAIL  --systemd-pid1 knows {sorted(SYSTEMD_IMAGES)}, not {unknown}")
+        return 1
+    rows, failed = [], 0
+    for image in images:
+        native = SYSTEMD_IMAGES[image]
+        cases = [c for c in plan(doc, {"images": [{"image": image, "families": [native]}]},
+                                 argparse.Namespace(image=None, intent=args.intent, mode=args.mode, list=True))
+                 if lib.is_detached(c["intent"]) and c["mode"] in ("root", "user")]
+        if not cases:
+            print(f"FAIL  {image}: no detached.* line for {native}")
+            failed += 1
+            continue
+        tag = None if args.list else systemd_image(image)
+        for case in cases:
+            label = f"{image:<14} {case['mode']:<4} systemd {case['intent']}"
+            if case["command"] is None:
+                rows.append((case, "FAIL", "does not render"))
+                print(f"FAIL  {label}: does not render")
+                failed += 1
+                continue
+            if args.list:
+                print(f"RUN   {label}\n      {case['command']}")
+                continue
+            code, output, seconds = systemd_case(doc, case, tag)
+            status, note = classify(code, output, None, None, case["variant"]["ci"]["check"])
+            if status == "FAIL":
+                failed += 1
+                print(f"FAIL  {label} ({seconds:.0f} s): {note}\n      last {TAIL_LINES} lines of output:\n{tail(output)}",
+                      flush=True)
+                if os.environ.get("GITHUB_ACTIONS") == "true":
+                    print(f"::error title=recipe FAIL::{image} {case['mode']} systemd {case['intent']}: {note}")
+            else:
+                print(f"{status:<5} {label} ({seconds:.0f} s)", flush=True)
+            rows.append((case, status, note))
+    if args.summary and not args.list:
+        with open(args.summary, "a") as handle:
+            handle.write("| Image | Mode | Path | Intent | Result | Note |\n|---|---|---|---|---|---|\n")
+            for case, status, note in rows:
+                handle.write(f"| {case['image']} | {case['mode']} | systemd PID 1 | `{case['intent']}` | {status} | "
+                             f"{str(note).replace('|', '/')} |\n")
+    print(f"summary: {len(rows) - failed} passed, {failed} failed (systemd PID 1)")
+    return 1 if failed else 0
 
 
 def tail(output, lines=TAIL_LINES):
@@ -333,6 +492,14 @@ def self_test():
         if sudo_setup(native, distro) != want:
             print(f"self-test FAIL: sudo_setup({native!r}, {distro!r})")
             failures += 1
+    # The su form: the app's root PATH line first, never twice (SuRoot.command).
+    for bare, want in [("dpkg --configure -a", SU_PATH_LINE + "dpkg --configure -a"),
+                       (SU_PATH_LINE + "x", SU_PATH_LINE + "x"),
+                       ('PATH="$PATH:/usr/sbin:/sbin" && x', 'PATH="$PATH:/usr/sbin:/sbin" && x'),
+                       ('PATH="$PATH:/usr/sbin:/sbin"x', SU_PATH_LINE + 'PATH="$PATH:/usr/sbin:/sbin"x')]:
+        if su_form(bare) != want:
+            print(f"self-test FAIL: su_form({bare!r}): {su_form(bare)!r}")
+            failures += 1
     # An xfail with an expected message holds only for that failure; without one, any failure is the xfail.
     devuan = re.compile("Unsupported distribution 'devuan'", re.MULTILINE)
     for code, output, xfail, expected, want in [
@@ -385,11 +552,15 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the cases, run nothing")
     parser.add_argument("--summary", help="append a Markdown table here (GITHUB_STEP_SUMMARY)")
     parser.add_argument("--self-test", action="store_true", help="test the os-release parser, the xfail patterns and exit")
+    parser.add_argument("--systemd-pid1", action="store_true",
+                        help="run the detached.* lines on images booted with systemd as PID 1 (SYSTEMD_IMAGES)")
     args = parser.parse_args()
     if args.self_test:
         return self_test()
     with open(os.path.join(ROOT, "recipes.json"), "rb") as handle:
         doc = lib.load(handle.read())
+    if args.systemd_pid1:
+        return systemd_main(doc, args)
     with open(os.path.join(ROOT, "ci", "images.json")) as handle:
         matrix = json.load(handle)
     try:

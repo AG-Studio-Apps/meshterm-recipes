@@ -1,0 +1,59 @@
+{
+ "_comment": "Every app-visible change serial 13 makes against serial 12 (scripts/validate.py --declared ci/serial13-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 12> --distros compat/distros.json). UNPUBLISHED DRAFT (2026-11-11): meshTerm docs/plan-2.5-navigation.md S9 (Detached Install Updates, Finish Update), app 2.5.",
+ "changes": [
+  {
+   "intent": "security-updates.apt",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "Changed (meshTerm S9.2 H4, Q-S9-4): apt-get install gains -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold, so a changed config file keeps the admin's copy (the new default lands as .dpkg-dist) instead of prompting. 2.4.0 / 2.4.1 fetch it and still accept it (their security-updates rule: measured with compat_check), and run it attached as before."
+  },
+  {
+   "intent": "detached.updates.apt",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.5 S9): Install Updates detached from the SSH connection, so a tailscale or openssh-server upgrade that drops the session cannot leave dpkg half configured (Pharos, 2026-11-11). The body's command is security-updates.apt's, with the {{packages}} names passed as \"$@\". The launcher (byte-identical across the four detached.* lines) runs as root under the ONE {{sudo}}: trap \"\" HUP, umask 022, the lock /run/meshterm-pkg.lock (a symlink naming the run; busy = exit 75), the claim (/var/log/meshterm/<kind>-<id>.state and run.state, written before detaching), then systemd-run --unit=meshterm-<kind>-<id> --collect --quiet -p Type=exec (an exec failure is synchronous and takes setsid at once) or setsid; neither = fail=start, exit 71. Values reach the scripts only as positional arguments; the body holds no ${ or $$ (systemd expands both in a unit argument; the validators refuse them) and exports LC_ALL=C DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_SUSPEND=1 (measured on ubuntu:24.04 with the release-pocket needrestart 3.6-7ubuntu4, LP #2067482: without it needrestart restarts the unit mid-run, Type=oneshot and Type=exec alike). 2.4.x and older never ask for detached.* and read {{runid}} as a later placeholder (variant unusable), so they keep the file."
+  },
+  {
+   "intent": "detached.updates.dnf",
+   "selector": {
+    "families": [
+     "dnf"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.5 S9): the same for AlmaLinux, Rocky Linux and RHEL; the body runs dnf --refresh upgrade -y \"$@\" (capitalised rpm names, as security-updates.dnf)."
+  },
+  {
+   "intent": "detached.updates.apk",
+   "selector": {
+    "families": [
+     "apk"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.5 S9): the same for Alpine (OpenRC: the setsid path); the body runs apk -U upgrade \"$@\"."
+  },
+  {
+   "intent": "detached.finish.apt",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.5 S9.5, Finish Update): finish an interrupted dpkg run in the background with dpkg --force-confdef --force-confold --configure -a (keep the admin's config). Same launcher; no {{packages}}."
+  },
+  {
+   "intent": "packages.finish-interrupted",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "New intent (meshTerm 2.5 S9.5): Finish Update's plain line, shown, copied and run in Open Terminal (and attached when the background start is not possible): {{sudo}}dpkg --force-confdef --force-confold --configure -a. apt-get -f install is never offered (it can remove packages)."
+  }
+ ]
+}

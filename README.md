@@ -136,6 +136,23 @@ foreground, at most every 12 hours (1 hour after a failure).
   with its own line. Sudo can ask twice: the fallback is a second `sudo`, so when the first one ends without a cached
   credential (the password was mistyped until sudo gave up, or the host caches none, `timestamp_timeout=0`), the
   second asks for the password again before `shutdown -r now` runs. Root runs the bare form and is never asked.
+- **Detached runs** (serial 13, meshTerm 2.5: `detached.updates.apt`, `.dnf`, `.apk`, `detached.finish.apt`): Install
+  Updates and Finish Update run on the server, away from the SSH connection, so a dropped link (a tailscaled or sshd
+  restart during the upgrade) cannot stop dpkg half way. The template has ONE shape, checked exactly by the
+  validators (`recipes_lib.check_detached`, meshTerm's `HostRecipeTemplate` the twin):
+  `{{sudo}}sh -c '<launcher>' meshterm-<kind>-{{runid}} {{user}} '<body>'`, plus ` {{packages}}` for an `updates`
+  run. No placeholder inside the quoted scripts (values arrive as positional arguments); no `${` or `$$` in the body
+  (systemd expands both in a transient unit's arguments); `"$@"` (the package names) once in the body right after an
+  upgrade verb; `{{runid}}` (8 lowercase hex, the app's run id) in no other intent. The launcher is byte-identical
+  across the four (`validate.py` checks it) and a detached run is at most 1,950 characters. It claims the run as root
+  (`/var/log/meshterm/<kind>-<id>.state`, `run.state`, the lock `/run/meshterm-pkg.lock`, a symlink naming the run;
+  busy = exit 75), then starts the body with `systemd-run -p Type=exec` (an exec failure is synchronous and falls
+  through to `setsid`) or `setsid`; with neither it writes `fail=start` and exits 71 (the app then runs the plain line
+  attached). The body exports `NEEDRESTART_SUSPEND=1`: measured on Ubuntu 24.04 with the release-pocket needrestart
+  (LP #2067482), needrestart otherwise restarts the unit mid-run. The container matrix runs the setsid path; the
+  `systemd` job (`run-recipes.py --systemd-pid1`, ubuntu:24.04 and Rocky 9 booted with systemd as PID 1) runs the
+  systemd path, and both gate signing. `packages.finish-interrupted` is Finish Update's plain line (shown, copied,
+  Open Terminal).
 
 ## How to update a recipe safely
 
