@@ -82,3 +82,25 @@ jobs:
           persist-credentials: false
       - name: Run the recipes
         run: python3 scripts/run-recipes.py --image "${{ matrix.image }}" --mode "${{ matrix.mode }}" --summary "$GITHUB_STEP_SUMMARY"
+
+  # meshTerm docs/plan-2.5-navigation.md S9.8 (serial 13): the distro containers above have no init, so a detached.*
+  # line there only ever takes its setsid path. This job boots ubuntu:24.04 and Rocky 9 with systemd as PID 1 and runs
+  # every detached.* line on the systemd path (root and sudo user), asserting the unit ran and ended cleanly and the
+  # claimed state's pid=, rc=0, ended= and released lock. Required like the distro jobs: publish.yml needs this whole
+  # workflow, so a red run stops the signing.
+  systemd:
+    name: ${{ matrix.image }} (systemd PID 1)
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep in step with SYSTEMD_IMAGES in scripts/run-recipes.py.
+        image: ["ubuntu:24.04", "rockylinux/rockylinux:9"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run the detached recipes under systemd
+        run: python3 scripts/run-recipes.py --systemd-pid1 --image "${{ matrix.image }}" --summary "$GITHUB_STEP_SUMMARY"

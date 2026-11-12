@@ -345,9 +345,39 @@ def check_windows_families(doc):
                 raise lib.RecipeError(f"{intent}[{index}]: no Windows installer is allowlisted for this intent")
 
 
+# meshTerm docs/plan-2.5-navigation.md S9.12 (1): a detached.* run is at most this long, so a fix always has room
+# under the 2,000 characters every shipped reader allows.
+DETACHED_MAX_RUN = 1950
+
+
+def check_detached_lines(doc):
+    """The repository's own rules for the detached.* lines (serial 13, meshTerm S9.2): every variant's launcher is
+    byte-identical (it is reviewed once), every run is at most DETACHED_MAX_RUN characters, and every variant names
+    one family that is its intent's last token."""
+    launchers = {}
+    for intent, variants in doc["intents"].items():
+        if not lib.is_detached(intent):
+            continue
+        family = intent.rsplit(".", 1)[1]
+        for index, variant in enumerate(variants):
+            where = f"{intent}[{index}]"
+            if len(variant["run"]) > DETACHED_MAX_RUN:
+                raise lib.RecipeError(f"{where}.run: {len(variant['run'])} characters, over the "
+                                      f"{DETACHED_MAX_RUN} a detached run may have")
+            if variant["families"] != [family]:
+                raise lib.RecipeError(f"{where}: a detached line is for its intent's family only ({family})")
+            launchers[where] = lib.detached_parts(variant["run"])[0]
+    if len(set(launchers.values())) > 1:
+        first = sorted(launchers)[0]
+        other = next(w for w in sorted(launchers) if launchers[w] != launchers[first])
+        raise lib.RecipeError(f"{other}: its launcher differs from {first}'s (the launcher is byte-identical "
+                              "across detached.* lines)")
+
+
 def validate(data, previous=None, need_ci=True):
     doc = lib.load(data)
     check_windows_families(doc)
+    check_detached_lines(doc)
     if need_ci:
         check_ci(doc)
         check_agent_lines(doc)
@@ -465,6 +495,13 @@ def self_test():
         doc["intents"][intent] = [dict({"families": ["any"], "run": run, "ci": {"skip": "test"}}, **extra)]
         return json.dumps(doc).encode()
 
+    def detached_with(intent, change, **extra):
+        doc = json.loads(good)
+        variant = dict(doc["intents"][intent][0], **extra)
+        variant["run"] = change(variant["run"])
+        doc["intents"][intent] = [variant]
+        return json.dumps(doc).encode()
+
     WIN_HERDR = windows_install_line("herdr")
     WIN_CODEX = windows_install_line("codex")
     run_at = "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $f;"
@@ -548,6 +585,13 @@ def self_test():
         "agent not removed": intent_of("agent.claude.install-official", official.rsplit(" && ", 1)[0]),
         "codex interactive": intent_of("agent.codex.install-official", codex.replace("env CODEX_NON_INTERACTIVE=1 ", "")),
         "herdr piped": intent_of("herdr.install", "curl -fsSL https://herdr.dev/install.sh | bash"),
+        # meshTerm S9.2 (serial 13): the detached shape. The template rules are in ci/format-cases.json; these are
+        # the repository's own (one launcher, the length cap, the family) and the S9.2 rule 2 refusals once more.
+        "detached launcher differs": detached_with("detached.finish.apt", lambda r: r.replace("umask 022; n=$0", "umask 077; n=$0", 1)),
+        "detached over the cap": detached_with("detached.finish.apt", lambda r: r.replace("; d=/var/log/meshterm; l=", "; : " + "x" * 220 + "; d=/var/log/meshterm; l=", 1)),
+        "detached on another family": detached_with("detached.updates.apt", lambda r: r, families=["dnf"]),
+        "detached body ${": detached_with("detached.finish.apt", lambda r: r.replace("k=$1; shift;", "k=${1}; shift;")),
+        "detached body $$": detached_with("detached.finish.apt", lambda r: r.replace("echo pid=$p", "echo pid=$$")),
     }
     failures = run_format_cases()
     for name, data in bad.items():

@@ -136,6 +136,68 @@ foreground, at most every 12 hours (1 hour after a failure).
   with its own line. Sudo can ask twice: the fallback is a second `sudo`, so when the first one ends without a cached
   credential (the password was mistyped until sudo gave up, or the host caches none, `timestamp_timeout=0`), the
   second asks for the password again before `shutdown -r now` runs. Root runs the bare form and is never asked.
+- **Detached runs** (serial 13, meshTerm 2.5: `detached.updates.apt`, `.dnf`, `.apk`, `detached.finish.apt`): Install
+  Updates and Finish Update run on the server, away from the SSH connection, so a dropped link (a tailscaled or sshd
+  restart during the upgrade) cannot stop dpkg half way. The template has ONE shape, checked exactly by the
+  validators (`recipes_lib.check_detached`, meshTerm's `HostRecipeTemplate` the twin):
+  `{{sudo}}sh -c '<launcher>' meshterm-<kind>-{{runid}} {{user}} '<body>'`, plus ` {{packages}}` for an `updates`
+  run. No placeholder inside the quoted scripts (values arrive as positional arguments); no `${` or `$$` in the body
+  (systemd expands both in a transient unit's arguments); `"$@"` (the package names) once in the body right after an
+  upgrade verb; `{{runid}}` (8 lowercase hex, the app's run id) in no other intent. The launcher is byte-identical
+  across the four (`validate.py` checks it) and a detached run is at most 1,950 characters. It claims the run as root
+  (`/var/log/meshterm/<kind>-<id>.state`, `run.state`, the lock `/run/meshterm-pkg.lock`, a symlink naming the run;
+  busy = exit 75), then starts the body with `systemd-run -p Type=exec` (an exec failure is synchronous and falls
+  through to `setsid`) or `setsid`; with neither it writes `fail=start` and exits 71 (the app then runs the plain line
+  attached). The body exports `NEEDRESTART_SUSPEND=1`: measured on Ubuntu 24.04 with the release-pocket needrestart
+  (LP #2067482), needrestart otherwise restarts the unit mid-run. The apt bodies (`detached.updates.apt`,
+  `detached.finish.apt`) then put the service restarts back: after `rc=` and `ended=` are written, and only when the
+  status is 0, `systemd-run --on-active=5 --collect -q sh -c "needrestart -m u -l||needrestart -l" 2>/dev/null`
+  starts needrestart in a transient timer unit of its own, in the server's own needrestart mode (libraries only: no
+  kernel or microcode hint; see "Which restarts" below). It fires after the body has exited and released the lock
+  (5 s plus the timer's default accuracy, so up to about a minute), so it can never restart the run's own unit,
+  never changes `rc=` and never holds `/run/meshterm-pkg.lock`. Without systemd, or without needrestart,
+  `systemd-run` fails quietly and nothing happens.
+  The container matrix runs the setsid path; the `systemd` job (`run-recipes.py --systemd-pid1`, ubuntu:24.04 and
+  Rocky 9 booted with systemd as PID 1) runs the systemd path of the `detached.*` lines and of the attached
+  `security-updates.apt` / `.dnf` lines, and both gate signing.
+- **Which restarts: the server's own needrestart setting** (James 2026-11-12, "Follow server setting"). The
+  follow-up runs what the server's own APT hook would have run, so a restart happens exactly when an attended
+  `apt upgrade` on that server would restart. `needrestart -m u` is Ubuntu's hook (`apt-pinvoke -m u`): Ubuntu mode
+  restarts automatically unless `/etc/needrestart/needrestart.conf` or `conf.d/*.conf` sets `$nrconf{restart}` (or
+  a UI), and then that mode wins (3.6-7ubuntu4.1 and later, LP #2068543; the release-pocket `3.6-7ubuntu4` forces
+  automatic restarts in Ubuntu mode whatever the conf says, exactly as its own hook does). Debian's needrestart has
+  no Ubuntu mode: it exits with `ERROR: Unknown UI mode 'u'!` (in the journal) before doing anything, and the plain
+  `needrestart -l` runs in the configured mode, stock `i`. It never prompts: the unit's stdin is `/dev/null` and its
+  output the journal, and with no terminal needrestart turns `i` into `l` (list only, in the journal); `a` restarts.
+  No `-f noninteractive`: with `-l` and a mode of `l` or `a` needrestart asks no debconf question (debconf logs
+  `unable to initialize frontend: Dialog` and falls back, harmless). Measured in Docker (systemd PID 1, a service
+  mapping a library an upgrade replaces), `detached.updates.apt`, `detached.finish.apt` and `security-updates.apt`:
+  Ubuntu 24.04 `3.6-7ubuntu4.5` and `3.6-7ubuntu4` stock restart it; `4.5` with `$nrconf{restart} = 'l'` or `'i'`
+  lists it and keeps its PID (`3.6-7ubuntu4` with `'l'` restarts, as above); Debian 12 `3.6-4+deb12u3` stock and
+  with `'l'` lists it and keeps its PID, with `'a'` restarts it; every needrestart unit ends (no leftover
+  `run-r*` unit), `rc=` and `ended=` are unchanged, and a session cgroup SIGKILLed mid-install leaves `dpkg --audit`
+  empty.
+- **Why the session is not the place for an upgrade** (2026-11-12): the Pharos failure (2026-11-11) was not a SIGHUP
+  (apt and dpkg ignore it): the session came over Tailscale SSH, whose sessions live in tailscaled's own service
+  cgroup, and the tailscale package's postinst restarted tailscaled, so systemd killed the whole cgroup, apt and dpkg
+  with it, leaving dpkg half configured. Serial 13's attached lines therefore start the package tool with `systemd-run
+  --wait --pipe --collect --quiet` where systemd runs (`r=; [ -d /run/systemd/system ] && command -v systemd-run
+  >/dev/null && r="..."; ... {{sudo}}$r apt-get ...`): the output still streams to the session and the exit status is
+  the line's, but the tool is in its own transient unit, outside the session's tree and cgroup. `security-updates.apt`
+  sets `DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1` there and, after a successful install on a host with
+  `/usr/sbin/needrestart`, starts the same needrestart timer unit as the detached bodies (`{{sudo}}systemd-run
+  --on-active=5 --collect --quiet sh -c "needrestart -m u -l||needrestart -l" || :`), so the marker and "Done" reach
+  the app before any service restarts (a restarted tailscaled can still drop the session then; the install is already
+  done). Measured in Docker (ubuntu:24.04 booted with systemd, an SSH server in its own service cgroup restarted by a
+  package's postinst): dpkg ends clean; a daemon mapping an upgraded library (libssl, and a fake library) is restarted
+  by the follow-up with needrestart `3.6-7ubuntu4` and `3.6-7ubuntu4.5` (listed, not restarted, by stock
+  `3.6-4+deb12u3` on Debian 12); apt runs once; a failing package gives the marker 100 and no follow-up; no
+  needrestart or no systemd is silent. When the session is killed mid-install, apt still finishes in its unit, but the
+  follow-up (in the dead shell) does not run, so the restarts wait for the next run or Restart Server. Without systemd
+  both lines are the serial 12 lines (apt with the confdef / confold options). `security-updates.dnf` takes the same
+  `systemd-run` form (rpm already defers SIGTERM during a transaction, but a unit stop escalates to SIGKILL after its
+  timeout); no needrestart step there. 2.4.0 / 2.4.1 accept both (their compiled readers and `compat_check`).
+  `packages.finish-interrupted` is Finish Update's plain line (shown, copied, Open Terminal).
 
 ## How to update a recipe safely
 

@@ -47,14 +47,14 @@ PACKAGE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}$")
 INTENT = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 DATE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
 WORD_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
-SAMPLE = {"user": "mt", "packages": ["git"], "port": 22, "proto": "tcp", "path": "/usr/bin/rootlesskit",
+SAMPLE = {"user": "mt", "runid": "ab12cd34", "packages": ["git"], "port": 22, "proto": "tcp", "path": "/usr/bin/rootlesskit",
           "rpmPackages": ["NetworkManager", "perl-DBI", "openssl-libs"]}
 # Intents whose {{packages}} the app fills from the host's own rpm listing (meshTerm 2.4 S5,
 # SecurityUpdatesPackagesSection), so the names can be capitalised whatever the reader accepts: rendered with
 # SAMPLE["rpmPackages"]. Whether a reader TAKES them is the profile's placement.capitalisedPackageIntents (an exact
 # intent, Swift's Set.contains) and rpmPackageName; any other intent's names must be PACKAGE
 # (HostRecipeValues.value(for:rpmNames:)).
-HOST_RPM_NAME_INTENTS = {"security-updates.dnf"}
+HOST_RPM_NAME_INTENTS = {"security-updates.dnf", "detached.updates.dnf"}
 RPM_PACKAGE = r"^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$"
 
 
@@ -193,7 +193,52 @@ class Reader:
             if c == "\\" and ((i > 0 and run[i - 1].isalpha()) or (i + 1 < len(run) and run[i + 1].isalpha())):
                 raise Refused("a backslash next to a letter")
         self.check_user_placement(run)
+        detached = r.get("detached")
+        if detached:
+            in_detached = fnmatch.fnmatchcase(intent or "", detached["intents"])
+            if "runid" in names and not in_detached:
+                raise Refused("{{runid}} outside a detached intent")
+            if in_detached:
+                self.check_detached(run, intent, names, detached)
         return names, later
+
+    def check_detached(self, run, intent, names, rule):
+        """meshTerm 2.5 (S9.2): a `detached.<kind>.<family>` intent's template is exactly the detached shape. The
+        profile's `reader.detached` carries the rule's constants (HostRecipeTemplate's detached* statics)."""
+        m = re.fullmatch(rule["intentPattern"], intent)
+        if not m:
+            raise Refused(f"detached intent {intent}")
+        for name in ("sudo", "runid", "user"):
+            if names.count(name) != 1:
+                raise Refused(f"{{{{{name}}}}} not once in a detached run")
+        shape = re.fullmatch(rule["shape"], run)
+        if not shape:
+            raise Refused("not the detached shape")
+        launcher, kind, body, packages = shape.group(1), shape.group(2), shape.group(3), bool(shape.group(4))
+        if kind != m.group(1) or packages != (kind in rule["packageKinds"]):
+            raise Refused("detached kind or {{packages}}")
+        for script in (launcher, body):
+            if "{{" in script or "}}" in script or any(t in script for t in rule["scriptRefused"]):
+                raise Refused("a placeholder or a refused token in a detached script")
+        if any(t in body for t in rule["bodyRefused"]):
+            raise Refused("${ or $$ in a detached body")
+        start = launcher.count(rule["start"])
+        if launcher.count("$@") != start or launcher.count('"$@"') != start:
+            raise Refused('"$@" in a detached launcher')
+        count = body.count('"$@"')
+        if body.count("$@") != count or count != (1 if packages else 0):
+            raise Refused('"$@" in a detached body')
+        if packages:
+            before = body[: body.index('"$@"')]
+
+            def ends(text, opener):
+                return text.endswith(opener) and (text == opener or text[: len(text) - len(opener)].endswith(" "))
+            if not any(ends(before, o) for o in rule["openers"]):
+                raise Refused('"$@" not after an upgrade verb')
+            exception = rule["installWordException"].get(intent)
+            head = before[: len(before) - len(exception)] if exception and ends(before, exception) else before
+            if any(contains_word(head, w) for w in rule["installWords"]):
+                raise Refused('an install verb before "$@"')
 
     @staticmethod
     def pattern_value(table, intent):
@@ -423,7 +468,8 @@ class Reader:
         if variant.later:
             return None
         supplied = self.supplied(intent)
-        values = {"sudo": "sudo ", "user": SAMPLE["user"], "packages": self.packages_value(intent),
+        values = {"sudo": "sudo ", "user": SAMPLE["user"], "runid": SAMPLE["runid"],
+                  "packages": self.packages_value(intent),
                   "port": str(SAMPLE["port"]), "proto": SAMPLE["proto"], "path": SAMPLE["path"],
                   "group": "sudo" if os_["family"] == "apt" else "wheel"}
         out, pos, run = "", 0, variant.run
@@ -813,6 +859,40 @@ def self_test():
                                              "security-updates.dnf", alma)
     case("2.4.0 without capitalisedPackageIntents: capitalised names render nil (no command)", {(origin, text)},
          [("none", None)])
+    # 16. meshTerm 2.5 (S9.2, serial 13): the detached shape. 2.5.0 accepts its own bundled draft and renders the
+    # detached lines with {{runid}}; 2.4.1 keeps the same file (the detached.* intents are unknown to it, {{runid}} a
+    # later placeholder: variant unusable); a body with ${ or $$, {{runid}} outside a detached intent, or the detached
+    # text under a security-updates.* name refuses the file for the reader that has that rule.
+    s13 = json.loads(by_name["app-2.5.0"]["_bundled_bytes"])
+    got, _ = kinds("app-2.5.0", by_name["app-2.5.0"]["_bundled_bytes"])
+    case("2.5.0 accepts its own bundled bytes (serial 13 draft)", got, want_absent=[("fail", "refuses-file", "")])
+    r25 = Reader(by_name["app-2.5.0"])
+    b25 = r25.decode(by_name["app-2.5.0"]["_bundled_bytes"])
+    ubuntu = next(d for d in distros if d.get("id") == "ubuntu")
+    text, _, origin = r25.command(b25, b25, "detached.updates.apt", ubuntu)
+    case("2.5.0: detached.updates.apt renders with the run id and the user", {(origin, bool(text) and
+         " meshterm-updates-ab12cd34 mt '" in text and text.endswith("' git"))}, [("file", True)])
+    got, _ = kinds("app-2.4.1", by_name["app-2.5.0"]["_bundled_bytes"], s12)
+    case("2.4.1 keeps serial 13 (detached.* unknown, {{runid}} a later placeholder)", got,
+         want_absent=[("fail", "refuses-file", "")])
+    for label, change in [
+            ("${ in a detached body", lambda d: d["intents"]["detached.finish.apt"][0].update(
+                run=d["intents"]["detached.finish.apt"][0]["run"].replace("k=$1; shift;", "k=${1}; shift;"))),
+            ("$$ in a detached body", lambda d: d["intents"]["detached.finish.apt"][0].update(
+                run=d["intents"]["detached.finish.apt"][0]["run"].replace("echo pid=$p", "echo pid=$$"))),
+            ("{{runid}} outside a detached intent", lambda d: d["intents"]["server.restart"][0].update(
+                run="{{sudo}}systemctl reboot {{runid}}")),
+            ("an updates run without {{packages}}", lambda d: d["intents"]["detached.updates.apk"][0].update(
+                run=d["intents"]["detached.updates.apk"][0]["run"][: -len(" {{packages}}")]))]:
+        broken = bump(s13, 14)
+        change(broken)
+        got, _ = kinds("app-2.5.0", broken, s13)
+        case(f"2.5.0: {label} refuses the file", got, [("fail", "refuses-file", "")])
+    moved = bump(s13, 14)
+    moved["intents"]["security-updates.apt"][0]["run"] = s13["intents"]["detached.updates.apt"][0]["run"]
+    got, _ = kinds("app-2.4.1", moved, s13)
+    case("2.4.1: the detached text under security-updates.apt refuses the file (why the intents are detached.*)",
+         got, [("fail", "refuses-file", "")])
     bad = len(cases) - sum(cases)
     print("self-test:", "PASS" if not bad else f"{bad} FAILED")
     return 1 if bad else 0
