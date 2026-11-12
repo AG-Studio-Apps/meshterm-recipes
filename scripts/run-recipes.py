@@ -39,6 +39,10 @@ app renders it (root and the sudo user, a fresh container per case), and asserts
 taken and not setsid), then the variant's own `ci.check` (the claimed state holds `pid=<digits>` and `rc=0`,
 `ended=` is set, `/run/meshterm-pkg.lock` is gone, the log holds the package tool's output).
 
+It runs the `security-updates.*` lines for the image's family the same way (serial 13: they start the package tool
+with `systemd-run --wait --pipe` when systemd runs): there the transient unit is systemd-run's own `run-u<N>.service`,
+which must have ended "Deactivated successfully" before the variant's `ci.check` runs.
+
 Exit status 1 when any case FAILs (an unexpected failure, or a check that does not hold).
 """
 import argparse
@@ -335,8 +339,9 @@ def systemd_image(image):
 def systemd_case(doc, case, tag):
     """One detached.* case on a booted systemd container: (code, output, seconds), codes as run_case's."""
     ci = case["variant"]["ci"]
+    detached = lib.is_detached(case["intent"])
     kind = case["intent"].split(".")[1]
-    unit = f"meshterm-{kind}-{case['runid']}"
+    unit = f"meshterm-{kind}-{case.get('runid')}"
     lines = ["set -e", "export DEBIAN_FRONTEND=noninteractive"]
     prep = needs_line(doc, ci, case["native"])
     if prep:
@@ -353,10 +358,15 @@ def systemd_case(doc, case, tag):
     lines.append('[ "$rc" = 0 ] || { echo "--- recipe exit $rc"; exit 10; }')
     # The unit ends (gone, or no longer active / activating), then systemd must have logged its clean end: the
     # systemd path ran (an exec failure there takes setsid, which this job must not pass).
-    lines.append(f"i=0; while [ $i -lt 900 ]; do case \"$(systemctl is-active {unit} 2>/dev/null)\" in "
-                 "active|activating|deactivating|reloading) i=$((i+1)); sleep 1;; *) break;; esac; done")
-    lines.append(f"journalctl --no-pager -o cat -u {unit} | grep -q 'Deactivated successfully' "
-                 f"|| {{ echo '--- {unit} did not run under systemd:'; journalctl --no-pager -o cat -u {unit} | tail -5; exit 11; }}")
+    if detached:
+        lines.append(f"i=0; while [ $i -lt 900 ]; do case \"$(systemctl is-active {unit} 2>/dev/null)\" in "
+                     "active|activating|deactivating|reloading) i=$((i+1)); sleep 1;; *) break;; esac; done")
+        lines.append(f"journalctl --no-pager -o cat -u {unit} | grep -q 'Deactivated successfully' "
+                     f"|| {{ echo '--- {unit} did not run under systemd:'; journalctl --no-pager -o cat -u {unit} | tail -5; exit 11; }}")
+    else:
+        # An attached line: it ran in the foreground, so systemd-run's own transient unit has already ended.
+        lines.append("journalctl --no-pager -o cat _PID=1 | grep -qE '^run-u[0-9]+[.]service: Deactivated successfully' "
+                     "|| { echo '--- no systemd-run unit ended cleanly:'; journalctl --no-pager -o cat _PID=1 | grep run-u | tail -5; exit 11; }")
     lines.append("echo '--- check'")
     lines.append(f"sh -c {shlex.quote(ci['check'])} >/dev/null || {{ echo '--- check failed'; "
                  "tr '\\n' ' ' </var/log/meshterm/run.state; cat /var/log/meshterm/*.state; tail -5 /var/log/meshterm/*.log; exit 11; }")
@@ -393,7 +403,8 @@ def systemd_case(doc, case, tag):
 
 
 def systemd_main(doc, args):
-    """--systemd-pid1: every detached.* case on SYSTEMD_IMAGES (or --image), root and sudo user."""
+    """--systemd-pid1: every detached.* and security-updates.* case on SYSTEMD_IMAGES (or --image), root and sudo
+    user."""
     images = [i for i in SYSTEMD_IMAGES if not args.image or i in args.image]
     unknown = [i for i in (args.image or []) if i not in SYSTEMD_IMAGES]
     if unknown:
@@ -404,7 +415,8 @@ def systemd_main(doc, args):
         native = SYSTEMD_IMAGES[image]
         cases = [c for c in plan(doc, {"images": [{"image": image, "families": [native]}]},
                                  argparse.Namespace(image=None, intent=args.intent, mode=args.mode, list=True))
-                 if lib.is_detached(c["intent"]) and c["mode"] in ("root", "user")]
+                 if (lib.is_detached(c["intent"]) or c["intent"].startswith("security-updates."))
+                 and c["mode"] in ("root", "user")]
         if not cases:
             print(f"FAIL  {image}: no detached.* line for {native}")
             failed += 1

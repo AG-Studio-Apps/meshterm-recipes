@@ -218,7 +218,7 @@
   "bundled": {
     "file": "compat/bundled/serial-13.json",
     "serial": 13,
-    "sha256": "015796f18d442ed3815bb5fea7932d9742952e268e1b1025fdf5ed636703aa5a",
+    "sha256": "7a26411500f220a6ff7fb86d865167b7b1fe82562b7f713af383119637c9525b",
     "_comment": "meshterm-recipes serial 13 UNPUBLISHED DRAFT (branch serial-13-draft): the bytes meshTerm 2.5 bundles with recipes-serial13.json.draft. Re-written from the published bytes by meshTerm tools/bundle-recipes.sh when serial 13 is signed."
   },
   "supplies": {

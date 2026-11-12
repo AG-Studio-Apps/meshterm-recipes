@@ -149,9 +149,36 @@ foreground, at most every 12 hours (1 hour after a failure).
   busy = exit 75), then starts the body with `systemd-run -p Type=exec` (an exec failure is synchronous and falls
   through to `setsid`) or `setsid`; with neither it writes `fail=start` and exits 71 (the app then runs the plain line
   attached). The body exports `NEEDRESTART_SUSPEND=1`: measured on Ubuntu 24.04 with the release-pocket needrestart
-  (LP #2067482), needrestart otherwise restarts the unit mid-run. The container matrix runs the setsid path; the
-  `systemd` job (`run-recipes.py --systemd-pid1`, ubuntu:24.04 and Rocky 9 booted with systemd as PID 1) runs the
-  systemd path, and both gate signing. `packages.finish-interrupted` is Finish Update's plain line (shown, copied,
+  (LP #2067482), needrestart otherwise restarts the unit mid-run. The apt bodies (`detached.updates.apt`,
+  `detached.finish.apt`) then put the service restarts back: after `rc=` and `ended=` are written, and only when the
+  status is 0, `systemd-run --on-active=5 --collect -q needrestart -r a -l -f noninteractive 2>/dev/null` starts
+  needrestart in a transient timer unit of its own (automatic restarts, libraries only: no kernel or microcode
+  hint). It fires after the body has exited and released the lock (5 s plus the timer's default accuracy, so up to
+  about a minute), so it can never restart the run's own unit, never changes `rc=` and never holds
+  `/run/meshterm-pkg.lock`. Without systemd, or without needrestart, `systemd-run` fails quietly and nothing happens.
+  The container matrix runs the setsid path; the `systemd` job (`run-recipes.py --systemd-pid1`, ubuntu:24.04 and
+  Rocky 9 booted with systemd as PID 1) runs the systemd path of the `detached.*` lines and of the attached
+  `security-updates.apt` / `.dnf` lines, and both gate signing.
+- **Why the session is not the place for an upgrade** (2026-11-12): the Pharos failure (2026-11-11) was not a
+  SIGHUP (apt and dpkg ignore it): the session came over Tailscale SSH, whose sessions live in tailscaled's own
+  service cgroup, and the tailscale package's postinst restarted tailscaled, so systemd killed the whole cgroup, apt
+  and dpkg with it, leaving dpkg half configured. Serial 13's attached lines therefore start the package tool with
+  `systemd-run --wait --pipe --collect --quiet` where systemd runs (`r=; [ -d /run/systemd/system ] && command -v
+  systemd-run >/dev/null && r="..."; ... {{sudo}}$r apt-get ...`): the output still streams to the session and the
+  exit status is the line's, but the tool is in its own transient unit, outside the session's tree and cgroup.
+  `security-updates.apt` sets `DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1` there and, after a successful
+  install on a host with `/usr/sbin/needrestart`, starts the same needrestart timer unit as the detached bodies
+  (`{{sudo}}systemd-run --on-active=5 --collect --quiet needrestart -r a -l -f noninteractive || :`), so the marker
+  and "Done" reach the app before any service restarts (a restarted tailscaled can still drop the session then; the
+  install is already done). Measured in Docker (ubuntu:24.04 booted with systemd, an SSH server in its own service
+  cgroup restarted by a package's postinst): dpkg ends clean; a daemon mapping an upgraded library (libssl, and a
+  fake library) is restarted by the follow-up with needrestart `3.6-7ubuntu4` and `3.6-7ubuntu4.5` (and `3.6-4+deb12u3`
+  on Debian 12); apt runs once; a failing package gives the marker 100 and no follow-up; no needrestart or no systemd
+  is silent. When the session is killed mid-install, apt still finishes in its unit, but the follow-up (in the dead
+  shell) does not run, so the restarts wait for the next run or Restart Server. Without systemd both lines are the
+  serial 12 lines (apt with the confdef / confold options). `security-updates.dnf` takes the same `systemd-run` form
+  (rpm already defers SIGTERM during a transaction, but a unit stop escalates to SIGKILL after its timeout); no
+  needrestart step there. 2.4.0 / 2.4.1 accept both (their compiled readers and `compat_check`). `packages.finish-interrupted` is Finish Update's plain line (shown, copied,
   Open Terminal).
 
 ## How to update a recipe safely
