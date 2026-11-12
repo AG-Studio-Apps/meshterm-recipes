@@ -89,6 +89,14 @@ SUDO_SETUP_DERIVATIVE = {
     "pacman": "pacman -Syu --noconfirm --needed sudo >/dev/null && rm -f /var/lib/pacman/sync/*.db "
               "&& useradd -m -s /bin/sh mt",
 }
+# An Arch-family image is brought fully up to date before anything else in a case runs, then its sync databases are
+# removed again (so a recipe still has to sync). Arch supports no partial upgrade: once the repositories move past the
+# image (openssl 3 -> 4, 2026-11-10), the harness's own `pacman -Sy <pkg>` lines (the sudo set-up, a ci.before such as
+# sshd.host-keys' openssh) fail "could not satisfy dependencies" before the recipe runs. A harness fix, not a recipe
+# one: recipes.json (and so the signed, bundled bytes) is unchanged.
+IMAGE_REFRESH = {
+    "pacman": "pacman -Syu --noconfirm >/dev/null && rm -f /var/lib/pacman/sync/*.db",
+}
 # The distro ids whose image is the family's own (SUDO_SETUP); any other id with that native family is a derivative.
 FAMILY_OWN_IDS = {"pacman": {"arch", "archlinux"}}
 
@@ -264,6 +272,8 @@ def su_form(bare):
 def run_case(doc, case):
     ci = case["variant"]["ci"]
     lines = ["set -e", "export DEBIAN_FRONTEND=noninteractive"]
+    if case["native"] in IMAGE_REFRESH:
+        lines.append(IMAGE_REFRESH[case["native"]])
     if case["mode"] == "su":
         # No sudoers entry: root's password (emptied here, so su asks for nothing) is the way to root.
         lines += [sudo_setup(case["native"], case.get("distro")), "passwd -d root >/dev/null"]
@@ -343,6 +353,8 @@ def systemd_case(doc, case, tag):
     kind = case["intent"].split(".")[1]
     unit = f"meshterm-{kind}-{case.get('runid')}"
     lines = ["set -e", "export DEBIAN_FRONTEND=noninteractive"]
+    if case["native"] in IMAGE_REFRESH:
+        lines.append(IMAGE_REFRESH[case["native"]])
     prep = needs_line(doc, ci, case["native"])
     if prep:
         lines.append("{ " + prep + "; } >/dev/null 2>&1 || true")
