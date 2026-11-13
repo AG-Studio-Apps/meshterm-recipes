@@ -1,8 +1,8 @@
 {
   "kind": "host-recipes",
   "schema": 1,
-  "serial": 13,
-  "date": "2026-11-11",
+  "serial": 14,
+  "date": "2026-11-13",
   "idLike": ["arch", "debian", "ubuntu", "fedora"],
   "packages": {
     "curl": {"apt": "curl", "dnf": "curl", "yum": "curl", "apk": "curl"},
@@ -412,7 +412,7 @@
        "ci": {"skip": "tailscaled is not running in a container"}}
     ],
     "security-updates.apt": [
-      {"families": ["apt"], "run": "r=; [ -d /run/systemd/system ] && command -v systemd-run >/dev/null && r=\"systemd-run --wait --pipe --collect --quiet --setenv=DEBIAN_FRONTEND=noninteractive --setenv=NEEDRESTART_SUSPEND=1\"; {{sudo}}apt-get update && {{sudo}}$r apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install --only-upgrade -y {{packages}} && if [ -n \"$r\" ] && [ -x /usr/sbin/needrestart ]; then {{sudo}}systemd-run --on-active=5 --collect --quiet sh -c \"needrestart -m u -l||needrestart -l\" || :; fi",
+      {"families": ["apt"], "run": "r=; [ -d /run/systemd/system ] && command -v systemd-run >/dev/null && r=1; {{sudo}}apt-get update && {{sudo}}${r:+systemd-run} ${r:+--wait} ${r:+--pipe} ${r:+--collect} ${r:+--quiet} ${r:+--setenv=DEBIAN_FRONTEND=noninteractive} ${r:+--setenv=NEEDRESTART_SUSPEND=1} apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install --only-upgrade -y {{packages}} && if [ -n \"$r\" ] && [ -x /usr/sbin/needrestart ]; then {{sudo}}systemd-run --on-active=5 --collect --quiet sh -c \"needrestart -m u -l||needrestart -l\" || :; fi",
        "ci": {"before": "apt-get update -qq && apt-get install -y -qq needrestart >/dev/null", "packages": ["apt", "libc6"], "check": "dpkg -s apt >/dev/null && { [ ! -d /run/systemd/system ] || journalctl --no-pager -o cat | grep -q \"Started run-r.*needrestart -m u -l\"; }"}}
     ],
     "security-updates.apk": [
@@ -420,7 +420,7 @@
        "ci": {"packages": ["musl", "busybox"], "check": "apk info -e musl >/dev/null"}}
     ],
     "security-updates.dnf": [
-      {"families": ["dnf"], "run": "r=; [ -d /run/systemd/system ] && command -v systemd-run >/dev/null && r=\"systemd-run --wait --pipe --collect --quiet\"; {{sudo}}$r dnf --refresh upgrade -y {{packages}}",
+      {"families": ["dnf"], "run": "r=; [ -d /run/systemd/system ] && command -v systemd-run >/dev/null && r=1; {{sudo}}${r:+systemd-run} ${r:+--wait} ${r:+--pipe} ${r:+--collect} ${r:+--quiet} dnf --refresh upgrade -y {{packages}}",
        "ci": {"before": "dnf install -y -q NetworkManager-libnm >/dev/null", "packages": ["NetworkManager-libnm", "openssl-libs"], "check": "rpm -q NetworkManager-libnm openssl-libs >/dev/null"}}
     ],
     "server.restart": [
