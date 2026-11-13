@@ -1,0 +1,23 @@
+{
+ "_comment": "Every app-visible change serial 14 makes against serial 13 (scripts/validate.py --declared ci/serial14-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 13> --distros compat/distros.json). Published 2026-11-13: zsh-safe security-updates lines (meshTerm 2.5 review).",
+ "changes": [
+  {
+   "intent": "security-updates.apt",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "Changed (2026-11-13, meshTerm 2.5 review): the systemd-run prefix is no longer a word-split $r (r=\"systemd-run ...\"; {{sudo}}$r apt-get), which zsh does not split: typed into a zsh login shell (meshTerm Manual, or Copy Command pasted by hand) sudo looked for a command named \"systemd-run --wait ...\" and nothing was upgraded. r is now 1 or empty and each word is its own ${r:+word} expansion, which every POSIX shell and zsh expand to the word or to nothing. Same arguments, same exit status, same needrestart follow-up; measured with a stub sudo in sh, dash, bash and zsh, with and without systemd."
+  },
+  {
+   "intent": "security-updates.dnf",
+   "selector": {
+    "families": [
+     "dnf"
+    ]
+   },
+   "reason": "Changed (2026-11-13): the same zsh fix as security-updates.apt (per-word ${r:+word} instead of a word-split $r). Same arguments and exit status."
+  }
+ ]
+}

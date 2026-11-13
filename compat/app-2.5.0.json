@@ -216,10 +216,10 @@
     }
   },
   "bundled": {
-    "file": "compat/bundled/serial-13.json",
-    "serial": 13,
-    "sha256": "8ca25e5876e11b5c0e1d7ea374a0e20f3996d031d2947317468b9d4769b8cf31",
-    "_comment": "meshterm-recipes serial 13 UNPUBLISHED DRAFT (branch serial-13-draft): the bytes meshTerm 2.5 bundles with recipes-serial13.json.draft. Re-written from the published bytes by meshTerm tools/bundle-recipes.sh when serial 13 is signed."
+    "file": "compat/bundled/serial-14.json",
+    "serial": 14,
+    "sha256": "00751eb44a20bbaa4afa07a4c7dfd486b37250e1e60304fac5534dc1f45268d9",
+    "_comment": "meshterm-recipes serial 14 (published 2026-11-13, zsh-safe security-updates lines): the bytes meshTerm 2.5 bundles. Re-written from the published bytes by meshTerm tools/bundle-recipes.sh."
   },
   "supplies": {
     "_comment": "Placeholders the app fills, per intent, beyond {{sudo}} and {{user}} (always). A recipe using one the app does not pass for that intent renders nil and the app falls back to its bundled line. From the call sites: HostPackageCommands, PendingSetupPresenter, ContainerHostFixes, FirewallCommands, ServerCommands.",
