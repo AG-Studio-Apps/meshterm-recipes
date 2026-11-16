@@ -1,0 +1,23 @@
+{
+ "_comment": "Every app-visible change serial 15 makes against serial 14 (scripts/validate.py --declared ci/serial15-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 14> --distros compat/distros.json). DRAFT 2026-11-16, unpublished: a sudoers that allows the package tool but not systemd-run (meshTerm 2.5 device check A155).",
+ "changes": [
+  {
+   "intent": "security-updates.apt",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "Changed (2026-11-16, meshTerm 2.5 A155): where systemd runs, the line first tries {{sudo}}systemd-run --wait --collect --quiet true (output hidden) and drops the systemd-run prefix when that fails. A sudoers that allows apt-get but not systemd-run refused the serial 13/14 line outright (sudo: not allowed to execute systemd-run), so Install Updates' restricted-sudo fallback, Copy Command and Open in Terminal upgraded nothing; it now runs the plain {{sudo}}apt-get install as 2.4 did. The probe runs after apt-get update, so a password sudo asks once. Same arguments and exit status where systemd-run is allowed."
+  },
+  {
+   "intent": "security-updates.dnf",
+   "selector": {
+    "families": [
+     "dnf"
+    ]
+   },
+   "reason": "Changed (2026-11-16): the same systemd-run probe as security-updates.apt, so a sudoers that allows dnf but not systemd-run runs the plain {{sudo}}dnf upgrade. Same arguments and exit status where systemd-run is allowed."
+  }
+ ]
+}
