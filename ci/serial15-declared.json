@@ -8,7 +8,7 @@
      "apt"
     ]
    },
-   "reason": "Changed (2026-11-16, meshTerm 2.5 A155): where systemd runs, the line first tries {{sudo}}systemd-run --wait --collect --quiet true (output hidden) and drops the systemd-run prefix when that fails. A sudoers that allows apt-get but not systemd-run refused the serial 13/14 line outright (sudo: not allowed to execute systemd-run), so Install Updates' restricted-sudo fallback, Copy Command and Open in Terminal upgraded nothing; it now runs the plain {{sudo}}apt-get install as 2.4 did. The probe runs after apt-get update, so a password sudo asks once. Same arguments and exit status where systemd-run is allowed."
+   "reason": "Changed (2026-11-16, meshTerm 2.5 A155): where systemd runs and the user is not root, the line asks sudo's POLICY ({{sudo}}-l systemd-run, output hidden: a listing, never a run of systemd-run) and drops the systemd-run prefix only when the policy refuses it, printing one plain line that it runs in the session. A sudoers that allows apt-get but not systemd-run refused the serial 13/14 line outright, so Install Updates' restricted-sudo fallback, Copy Command and Open in Terminal upgraded nothing. A transient systemd failure no longer drops the protection (systemd-run is not run by the probe). Real sudo on ubuntu:24.04, debian:12, rockylinux:9: one password prompt per run (as before) except timestamp_timeout=0, no denial logged. Same arguments and exit status where systemd-run is allowed; root and su skip the probe."
   },
   {
    "intent": "security-updates.dnf",
@@ -17,7 +17,7 @@
      "dnf"
     ]
    },
-   "reason": "Changed (2026-11-16): the same systemd-run probe as security-updates.apt, so a sudoers that allows dnf but not systemd-run runs the plain {{sudo}}dnf upgrade. Same arguments and exit status where systemd-run is allowed."
+   "reason": "Changed (2026-11-16): the same sudo-policy probe as security-updates.apt (it is the run's first sudo, so a password sudo asks there and dnf reuses it)."
   }
  ]
 }
