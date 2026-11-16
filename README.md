@@ -183,7 +183,10 @@ foreground, at most every 12 hours (1 hour after a failure).
   with it, leaving dpkg half configured. Serial 13's attached lines therefore start the package tool with `systemd-run
   --wait --pipe --collect --quiet` where systemd runs (`r=; [ -d /run/systemd/system ] && command -v systemd-run
   >/dev/null && r=1; ... {{sudo}}${r:+systemd-run} ${r:+--wait} ... apt-get ...`; serial 14: one `${r:+word}`
-  per word, because zsh does not word-split a `$r` holding the whole prefix): the output still streams to the session and the exit status is
+  per word, because zsh does not word-split a `$r` holding the whole prefix; serial 15: a non-root user first asks
+  sudo's policy with `{{sudo}}-l systemd-run`, and only a refusal drops `r` (with one plain-English line), so a
+  sudoers that allows the package tool but not systemd-run runs the plain line): the output still streams to the
+  session and the exit status is
   the line's, but the tool is in its own transient unit, outside the session's tree and cgroup. `security-updates.apt`
   sets `DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1` there and, after a successful install on a host with
   `/usr/sbin/needrestart`, starts the same needrestart timer unit as the detached bodies (`{{sudo}}systemd-run

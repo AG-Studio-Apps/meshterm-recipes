@@ -1,0 +1,23 @@
+{
+ "_comment": "Every app-visible change serial 15 makes against serial 14 (scripts/validate.py --declared ci/serial15-declared.json --baseline ci/serial3-baseline.json --previous-ref <serial 14> --distros compat/distros.json). DRAFT 2026-11-16, unpublished: a sudoers that allows the package tool but not systemd-run (meshTerm 2.5 device check A155).",
+ "changes": [
+  {
+   "intent": "security-updates.apt",
+   "selector": {
+    "families": [
+     "apt"
+    ]
+   },
+   "reason": "Changed (2026-11-16, meshTerm 2.5 A155): where systemd runs and the user is not root, the line asks sudo's POLICY ({{sudo}}-l systemd-run, output hidden: a listing, never a run of systemd-run) and drops the systemd-run prefix only when the policy refuses it, printing one plain line that it runs in the session. A sudoers that allows apt-get but not systemd-run refused the serial 13/14 line outright, so Install Updates' restricted-sudo fallback, Copy Command and Open in Terminal upgraded nothing. A transient systemd failure no longer drops the protection (systemd-run is not run by the probe). Real sudo on ubuntu:24.04, debian:12, rockylinux:9: one password prompt per run (as before) except timestamp_timeout=0, no denial logged. Same arguments and exit status where systemd-run is allowed; root and su skip the probe."
+  },
+  {
+   "intent": "security-updates.dnf",
+   "selector": {
+    "families": [
+     "dnf"
+    ]
+   },
+   "reason": "Changed (2026-11-16): the same sudo-policy probe as security-updates.apt (it is the run's first sudo, so a password sudo asks there and dnf reuses it)."
+  }
+ ]
+}
